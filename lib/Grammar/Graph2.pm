@@ -22,12 +22,12 @@ sub gp_final_vertex { _rw_graph_attribute('final_vertex', @_) }
 #
 #####################################################################
 
-sub vp_type     { _rw_vertex_attribute('type', @_)    }
-sub vp_name     { _rw_vertex_attribute('name', @_)    }
-sub vp_p1       { _rw_vertex_attribute('p1', @_)      }
-sub vp_p2       { _rw_vertex_attribute('p2', @_)      }
+sub vp_type     { _rw_vertex_attribute('type',    @_) }
+sub vp_name     { _rw_vertex_attribute('name',    @_) }
+sub vp_p1       { _rw_vertex_attribute('p1',      @_) }
+sub vp_p2       { _rw_vertex_attribute('p2',      @_) }
 sub vp_partner  { _rw_vertex_attribute('partner', @_) }
-sub vp_input    { _rw_vertex_attribute('input', @_)   }
+sub vp_input    { _rw_vertex_attribute('input',   @_) }
 
 #####################################################################
 #

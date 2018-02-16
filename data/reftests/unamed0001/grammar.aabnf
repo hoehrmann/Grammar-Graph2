@@ -1,0 +1,4 @@
+S = A B A
+B = A A A / "b"
+A = A "x" / "y" A / "z"
+
