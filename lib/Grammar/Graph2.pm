@@ -118,34 +118,35 @@ sub from_grammar_graph {
   );
 
   for my $v ($old->g->vertices) {
-    my $label = $old->get_vertex_label($v);
-    next unless $label;
 
-    $self->vp_p1($v, $label->p1)
-      if UNIVERSAL::can($label, 'p1');
+    $self->vp_p1($v, $old->vp_p1($v))
+      if $old->g->has_vertex_attribute($v, 'p1');
 
-    $self->vp_p2($v, $label->p2)
-      if UNIVERSAL::can($label, 'p2');
+    $self->vp_p2($v, $old->vp_p2($v))
+      if $old->g->has_vertex_attribute($v, 'p2');
 
-    $self->vp_name($v, $label->name)
-      if UNIVERSAL::can($label, 'name');
+    $self->vp_name($v, $old->vp_name($v))
+      if $old->g->has_vertex_attribute($v, 'name');
 
-    $self->vp_partner($v, $label->partner)
-      if UNIVERSAL::can($label, 'partner');
+    $self->vp_partner($v, $old->vp_partner($v))
+      if $old->g->has_vertex_attribute($v, 'partner');
 
-    my $type = ref($label) =~ s/.*:://r;
+    my $type = $old->vp_type($v);
 
     $self->vp_type($v, $type);
 
     if ($old->is_terminal_vertex($v)) {
       next if $type eq 'Prelude';
       next if $type eq 'Postlude';
+
+      my $char_obj = $old->get_vertex_char_object($v);
+
       $self->vp_type($v, 'Input');
-      $self->vp_input($v, $label);
-      die unless UNIVERSAL::can($label, 'spans');
+      $self->vp_input($v, $char_obj);
+      die unless UNIVERSAL::can($char_obj, 'spans');
       $dbh->begin_work();
       $span_insert_sth->execute($v, @$_)
-        for $label->spans->spans;
+        for $char_obj->spans->spans;
       $dbh->commit();
     }
 
@@ -155,7 +156,7 @@ sub from_grammar_graph {
   $self->gp_final_vertex($old->final_vertex);
 
   unlink 'TEST.sqlite';
-  $dbh->sqlite_backup_to_file('TEST.sqlite');
+#  $dbh->sqlite_backup_to_file('TEST.sqlite');
 
   return $self;
 }

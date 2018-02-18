@@ -59,8 +59,9 @@ sub parse_to_ref_data {
 
   my $e = $p->create_match_enumerator();
 
-  my @all_matches = $self->series->options->{enumerate_all_paths} ?
-    $e->all_matches() : ();
+  my @all_matches =
+    grep { defined } $self->series->options->{enumerate_all_paths} ?
+      $e->all_matches() : ();
 
   return {
     parent_child_signature => $p->_dbh->selectall_arrayref(q{
@@ -89,7 +90,11 @@ sub parse_to_ref_data {
       uniq_by {
         Storable::freeze(\$_)
       } map {
-        $e->random_match()->to_tree(pruned => 1)
+        $_->to_tree(pruned => 1)
+      } grep {
+        defined
+      } map {
+        $e->random_match()
       } 1 .. 32
     ],
     all_matches => [

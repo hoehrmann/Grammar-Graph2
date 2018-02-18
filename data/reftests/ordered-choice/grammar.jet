@@ -1,0 +1,16 @@
+["grammar", {}, [
+
+  ["rule", {"name": "S"}, [
+    ["orderedChoice", {}, [
+      ["ref", {"name": "A"}, []],
+      ["ref", {"name": "B"}, []] ]]]],
+
+  ["rule", {"name": "A"}, [
+    ["asciiInsensitiveString", { "text": "foo" }, []]]],
+
+  ["rule", {"name": "B"}, [
+    ["orderedChoice", {}, [
+      ["asciiInsensitiveString", { "text": "foo" }, []],
+      ["asciiInsensitiveString", { "text": "bar" }, []]]]]]
+
+]]

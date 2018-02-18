@@ -6,6 +6,7 @@ use Moo;
 use Graph::Feather;
 use Graph::Directed;
 use Grammar::Graph2;
+use Grammar::Graph;
 use Log::Any qw//;
 use Types::Standard qw/:all/;
 use YAML::XS;
@@ -13,6 +14,7 @@ use File::Spec qw//;
 use Parse::ABNF;
 use File::Find::Rule;
 use File::Basename qw//;
+use JSON;
 
 has 'base_path' => (
   is       => 'ro',
@@ -62,10 +64,17 @@ sub basename {
 sub _grammar_path {
   my ($self) = @_;
 
-  return File::Spec->rel2abs(
+  my $abnf_path = File::Spec->rel2abs(
     File::Spec->catfile(
       $self->base_path, 'grammar.aabnf')
   );
+
+  my $jet_path = File::Spec->rel2abs(
+    File::Spec->catfile(
+      $self->base_path, 'grammar.jet')
+  );
+  
+  return ( -f $abnf_path ? $abnf_path : $jet_path );
 }
 
 sub _options_path {
@@ -86,14 +95,38 @@ sub _load_grammar_file {
   $self->_log->debugf("Load grammar %s for %s",
     $self->_grammar_path, $shortname);
 
-  my $formal = Parse::ABNF->new->parse_to_grammar_formal(do {
-    local $/;
-    die "There is no file $path" unless -f $path;
-    open my $f, '<', $path;
-    <$f> =~ s/\r\n/\n/gr;
-  }, core => 1);
+  my ($fn, $dir, $ext) = File::Basename::fileparse(
+    $self->_grammar_path, qw/.jet .abnf .aabnf/);
 
-  my $g = Grammar::Graph->from_grammar_formal($formal, $shortname);
+  my $jet;
+  
+  # FIXME(bh): do not understand why aabnf in one place
+  # but .jet with the dot in another
+
+  if ($ext eq 'aabnf') {
+    $self->_log->debug("Parsing grammar with Parse::ABNF");
+    $jet = Parse::ABNF->new->parse_to_jet(do {
+      local $/;
+      die "There is no file $path" unless -f $path;
+      open my $f, '<', $path;
+      <$f> =~ s/\r\n/\n/gr;
+    }, core => 1);
+  }
+
+  if ($ext eq '.jet') {
+    $self->_log->debug("Loading grammar with JSON module");
+    my $jet_content = do {
+      local $/;
+      open my $f, '<', $path;
+      <$f>;
+    };
+#    die $jet_content;
+    $jet = JSON->new->decode($jet_content);
+  }
+
+die unless defined $jet;
+
+  my $g = Grammar::Graph->from_jet($jet, $shortname);
 
   $g->fa_drop_rules_not_needed_for($shortname);
   $g->fa_merge_character_classes();
