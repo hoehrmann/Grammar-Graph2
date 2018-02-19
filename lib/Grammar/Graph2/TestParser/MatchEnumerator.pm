@@ -236,6 +236,9 @@ sub _find_next_path_between_step {
     $src_pos, $src_vertex, $dst_pos, $dst_vertex,
     $old_root, $ix, $len) = @_;
 
+#warn "src_pos not defined" unless defined $src_pos;
+#warn "dst_pos not defined" unless defined $dst_pos;
+
   my $root = $self->_dbh->selectrow_hashref(q{
     SELECT
       t.rowid AS rowid,

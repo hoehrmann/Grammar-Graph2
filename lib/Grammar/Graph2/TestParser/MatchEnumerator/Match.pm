@@ -38,6 +38,7 @@ sub _build_tree {
     SELECT
       t.rowid AS rowid,
       mid_src_p.is_push AS mid_src_is_push,
+      mid_src_p.is_pop AS mid_src_is_pop,
       src_p.name AS src_name,
       t.*
     FROM
@@ -51,12 +52,12 @@ sub _build_tree {
   }, {}, $e);
 
   my @children = (
-    _build_tree($self, $todo),
-    _build_tree($self, $todo),
+    _build_tree($self, $todo, %o),
+    _build_tree($self, $todo, %o),
   );
 
   return [
-    ($item->{mid_src_is_push}
+    (!$item->{mid_src_is_pop}
       ? ($item->{src_name} // '')
       : '') . ( $o{rowids} ? (':' . $e) : '' ),
 
