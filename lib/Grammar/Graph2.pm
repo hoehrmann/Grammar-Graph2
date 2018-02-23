@@ -22,12 +22,12 @@ sub gp_final_vertex { _rw_graph_attribute('final_vertex', @_) }
 #
 #####################################################################
 
-sub vp_type     { _rw_vertex_attribute('type',    @_) }
-sub vp_name     { _rw_vertex_attribute('name',    @_) }
-sub vp_p1       { _rw_vertex_attribute('p1',      @_) }
-sub vp_p2       { _rw_vertex_attribute('p2',      @_) }
-sub vp_partner  { _rw_vertex_attribute('partner', @_) }
-sub vp_input    { _rw_vertex_attribute('input',   @_) }
+sub vp_type     { _rw_vertex_attribute('type',     @_) }
+sub vp_name     { _rw_vertex_attribute('name',     @_) }
+sub vp_p1       { _rw_vertex_attribute('p1',       @_) }
+sub vp_p2       { _rw_vertex_attribute('p2',       @_) }
+sub vp_partner  { _rw_vertex_attribute('partner',  @_) }
+sub vp_run_list { _rw_vertex_attribute('run_list', @_) }
 
 #####################################################################
 #
@@ -96,23 +96,6 @@ sub from_grammar_graph {
 
   my $dbh = $g->{dbh};
 
-  $dbh->do(q{
-    CREATE TABLE vertex_span(
-      vertex,
-      min INTEGER,
-      max INTEGER
-    );
-  });
-
-  $dbh->do(q{
-    CREATE INDEX idx_vertex_span_vertex
-      ON vertex_span(vertex)
-  });
-
-  my $span_insert_sth = $dbh->prepare(q{
-    INSERT INTO vertex_span(vertex, min, max) VALUES (?, ?, ?)
-  });
-
   my $self = $class->new(
     g => $g,
   );
@@ -131,25 +114,16 @@ sub from_grammar_graph {
     $self->vp_partner($v, $old->vp_partner($v))
       if $old->g->has_vertex_attribute($v, 'partner');
 
+    $self->vp_run_list($v, $old->vp_run_list($v))
+      if $old->g->has_vertex_attribute($v, 'run_list');
+
     my $type = $old->vp_type($v);
 
-    $self->vp_type($v, $type);
-
-    if ($old->is_terminal_vertex($v)) {
-      next if $type eq 'Prelude';
-      next if $type eq 'Postlude';
-
-      my $char_obj = $old->get_vertex_char_object($v);
-
+    if ($type eq 'Grammar::Formal::CharClass') {
       $self->vp_type($v, 'Input');
-      $self->vp_input($v, $char_obj);
-      die unless UNIVERSAL::can($char_obj, 'spans');
-      $dbh->begin_work();
-      $span_insert_sth->execute($v, @$_)
-        for $char_obj->spans->spans;
-      $dbh->commit();
+    } else {
+      $self->vp_type($v, $type);
     }
-
   }
 
   $self->gp_start_vertex($old->start_vertex);

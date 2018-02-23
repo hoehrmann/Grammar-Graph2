@@ -33,7 +33,7 @@ use Grammar::Graph2::TestCase;
 local $Storable::canonical = 1;
 
 # my @dirs = <./data/reftests/xml*>;
-my @dirs = <./data/reftests/*>;
+my @dirs = <./data/reftests/xml2015-*>;
 
 for my $dir (@dirs) {
 
@@ -86,6 +86,8 @@ for my $dir (@dirs) {
   my $ts = Grammar::Graph2::TestSeries->new(
     base_path => $dir,
   );
+
+  $ts->g->g->{dbh}->sqlite_backup_to_file('TEST.sqlite');
 
 #  say $ts->options->{startrule};
 

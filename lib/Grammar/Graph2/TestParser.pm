@@ -51,6 +51,8 @@ sub BUILD {
 sub create_t {
   my ($self) = @_;
 
+  $self->_create_vertex_spans();
+
   $self->_create_vertex_property_table();
 
   $self->_recompute_stack_properties();
@@ -715,6 +717,54 @@ sub _create_sibling_signature {
 #####################################################################
 # This stuff does not really belong here:
 #####################################################################
+
+sub _create_vertex_spans {
+  my ($self) = @_;
+
+  $self->_dbh->do(q{
+    DROP TABLE IF EXISTS vertex_span
+  });
+
+  $self->_dbh->do(q{
+    CREATE TABLE vertex_span(
+      vertex,
+      min INTEGER,
+      max INTEGER
+    );
+  });
+
+  $self->_dbh->do(q{
+    CREATE INDEX idx_vertex_span_vertex
+      ON vertex_span(vertex)
+  });
+
+  my $span_insert_sth = $self->_dbh->prepare(q{
+    INSERT INTO vertex_span(vertex, min, max) VALUES (?, ?, ?)
+  });
+
+  for my $v ($self->g->g->vertices) {
+
+    my $type = $self->g->vp_type($v);
+
+
+    if ($self->g->is_terminal_vertex($v)) {
+      next if $type eq 'Prelude';
+      next if $type eq 'Postlude';
+
+      my $char_obj = Set::IntSpan->new(
+        $self->g->vp_run_list($v)
+      );
+
+      $self->g->vp_type($v, 'Input');
+      die unless UNIVERSAL::can($char_obj, 'spans');
+      $self->_dbh->begin_work();
+      $span_insert_sth->execute($v, @$_)
+        for $char_obj->spans;
+      $self->_dbh->commit();
+    }
+  }
+
+}
 
 sub _create_vertex_property_table {
   my ($self) = @_;

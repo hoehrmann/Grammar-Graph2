@@ -1,6 +1,7 @@
 package Grammar::Graph2::TestSeries;
 use strict;
 use warnings;
+use autodie;
 use 5.024000;
 use Moo;
 use Graph::Feather;

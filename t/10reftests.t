@@ -77,3 +77,8 @@ for my $dir (sort @dirs) {
 }
 
 done_testing();
+
+__END__
+
+Grammar::Graph2::Test::RefTestRunner
+
