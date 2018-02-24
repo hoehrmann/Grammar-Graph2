@@ -22,7 +22,7 @@ sub gp_final_vertex { _rw_graph_attribute('final_vertex', @_) }
 #
 #####################################################################
 
-sub vp_type     { _rw_vertex_attribute('type',     @_) }
+sub vp_type     { _rw_vertex_attribute('type',     @_) // '' }
 sub vp_name     { _rw_vertex_attribute('name',     @_) }
 sub vp_p1       { _rw_vertex_attribute('p1',       @_) }
 sub vp_p2       { _rw_vertex_attribute('p2',       @_) }
@@ -42,17 +42,38 @@ sub is_fi2_vertex      { vp_type(@_) eq 'Fi2'      }
 sub is_start_vertex    { vp_type(@_) eq 'Start'    }
 sub is_final_vertex    { vp_type(@_) eq 'Final'    }
 sub is_input_vertex    { vp_type(@_) eq 'Input'    }
+sub is_indirect_input_vertex    { vp_type(@_) eq 'IndirectInput'    }
 sub is_prelude_vertex  { vp_type(@_) eq 'Prelude'  }
 sub is_postlude_vertex { vp_type(@_) eq 'Postlude' }
 
 sub is_terminal_vertex {
   is_input_vertex(@_) or
+  is_indirect_input_vertex(@_) or
   is_prelude_vertex(@_) or
   is_postlude_vertex(@_) or
   0
 }
 
 sub is_epsilon_vertex  { not is_terminal_vertex(@_) }
+
+#####################################################################
+#
+#####################################################################
+
+sub conditionals_from_if {
+  my ($self, $if) = @_;
+
+  my $fi = $self->vp_partner($if);
+
+  return (
+    $if,
+    $self->vp_p1($if),
+    $self->vp_p2($if),
+    $self->vp_p2($fi),
+    $self->vp_p1($fi),
+    $fi
+  );
+}
 
 #####################################################################
 #
@@ -85,6 +106,17 @@ sub _rw_graph_attribute {
 #####################################################################
 #
 #####################################################################
+
+sub _from_db {
+  my ($class, $db_path) = @_;
+  my $g = Graph::Feather->new;
+
+  $g->_feather_restore_from_file($db_path);
+
+  return $class->new(
+    g => $g
+  );
+}
 
 sub from_grammar_graph {
   my ($class, $old) = @_;

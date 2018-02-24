@@ -172,7 +172,7 @@ sub _create_grammar_input_cross_product {
         e.src IN (SELECT vertex
                   FROM vertex_attribute
                   WHERE attribute_name = 'type'
-                    AND attribute_value NOT IN ('Input'))
+                    AND attribute_value NOT IN ('Input', 'IndirectInput'))
     )
 
     SELECT * FROM terminal_edges
@@ -755,7 +755,7 @@ sub _create_vertex_spans {
         $self->g->vp_run_list($v)
       );
 
-      $self->g->vp_type($v, 'Input');
+#      $self->g->vp_type($v, 'Input');
       die unless UNIVERSAL::can($char_obj, 'spans');
       $self->_dbh->begin_work();
       $span_insert_sth->execute($v, @$_)
