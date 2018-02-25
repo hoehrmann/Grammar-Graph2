@@ -1,0 +1,23 @@
+["grammar", {}, [
+
+  ["rule", {"name": "S"}, [
+    ["ref", {"name": "A"}, []]]],
+
+  ["rule", {"name": "A"}, [
+    ["group", {}, [
+      ["orderedChoice", {}, [
+        ["greedyOneOrMore", {}, [
+          ["ref", {"name": "B"}, []]]],
+        ["greedyOneOrMore", {}, [
+          ["ref", {"name": "C"}, []]]]]],
+      ["greedyOneOrMore", {}, [
+        ["ref", {"name": "D"}, []]]]]]]],
+
+  ["rule", {"name": "B"}, [
+    ["asciiInsensitiveString", {"text": "a"}, []]]],
+
+  ["rule", {"name": "C"}, [
+    ["asciiInsensitiveString", {"text": "a"}, []]]],
+
+  ["rule", {"name": "D"}, [
+    ["asciiInsensitiveString", {"text": "a"}, []]]]]]

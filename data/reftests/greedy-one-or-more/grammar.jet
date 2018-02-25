@@ -1,0 +1,14 @@
+["grammar", {}, [
+
+  ["rule", {"name": "S"}, [
+    ["ref", {"name": "A"}, []]]],
+
+  ["rule", {"name": "A"}, [
+    ["group", {}, [
+      ["greedyOneOrMore", {}, [
+        ["asciiInsensitiveString", {"text": "a"}, []]]],
+      ["ref", {"name": "B"}, []]]]]],
+
+  ["rule", {"name": "B"}, [
+    ["repetition", {"min":0, "max":null}, [
+      ["asciiInsensitiveString", {"text": "a"}, []]]]]]]]
