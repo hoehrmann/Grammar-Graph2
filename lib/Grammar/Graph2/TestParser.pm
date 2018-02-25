@@ -74,6 +74,10 @@ sub create_t {
   $self->_create_parent_child_signature();
 
   $self->_create_sibling_signature();
+
+  $self->_create_neighbour_views();
+
+  $self->_create_parent_child_view();
 }
 
 sub create_match_enumerator {
@@ -172,7 +176,7 @@ sub _create_grammar_input_cross_product {
         e.src IN (SELECT vertex
                   FROM vertex_attribute
                   WHERE attribute_name = 'type'
-                    AND attribute_value NOT IN ('Input', 'IndirectInput'))
+                    AND attribute_value NOT IN ('Input'))
     )
 
     SELECT * FROM terminal_edges
@@ -492,6 +496,8 @@ sub _create_trees_bottom_up {
 
     }, {}, ($min_distance) x 4);
 
+#warn join "\t", "min_distance", $min_distance;
+
     # A Rule like "A but not B" requires proving that there is no
     # match for "B" for the rule as a whole to match. TODO: finish
 
@@ -504,8 +510,23 @@ sub _create_trees_bottom_up {
         t.rowid > ?
     }, {}, $max_rowid);
 
-    if (not defined $new_min_distance) {
+    my @debug = $self->_dbh->selectall_array(q{
+      SELECT
+        *, dst_pos - src_pos
+      FROM
+        t
+      WHERE
+        t.rowid > ?
+    }, {}, $max_rowid);
 
+#    say join "\t", "min_distance", $min_distance, "max_rowid", $max_rowid, map { $_ // '' } @$_ for @debug;
+
+    if (not defined $new_min_distance) {
+      # @@@
+      $new_min_distance = $min_distance + 1;
+    }
+
+    if (not defined $new_min_distance) {
       ($new_min_distance) = $self->_dbh->selectrow_array(q{
         SELECT
           MIN(dst_pos - src_pos) AS min_distance
@@ -764,6 +785,151 @@ sub _create_vertex_spans {
     }
   }
 
+}
+
+sub _create_parent_child_view {
+  my ($self) = @_;
+
+  $self->_dbh->do(q{
+    DROP VIEW IF EXISTS view_parent_child
+  });
+
+  $self->_dbh->do(q{
+
+    CREATE VIEW view_parent_child AS
+    WITH RECURSIVE pc(parent, child) AS (
+
+      SELECT
+        Edge.src AS parent,
+        Edge.dst AS child
+      FROM
+        Edge
+          INNER JOIN vertex_property as dst_p
+            ON (dst_p.vertex = Edge.dst)
+          INNER JOIN vertex_property as src_p
+            ON (src_p.vertex = Edge.src)
+      WHERE
+        src_p.is_push AND dst_p.vertex <> src_p.partner
+
+      UNION
+
+      SELECT
+        r.parent AS parent,
+        COALESCE(partner_edges.dst, Edge.dst) AS child
+      FROM Edge
+        INNER JOIN pc AS r
+          ON (Edge.src = r.child)
+        INNER JOIN vertex_property AS src_p
+          ON (Edge.src = src_p.vertex)
+        INNER JOIN vertex_property AS dst_p
+          ON (Edge.dst = dst_p.vertex)
+        INNER JOIN vertex_property AS parent_p
+          ON (r.parent = parent_p.vertex)
+        INNER JOIN vertex_property AS child_p
+          ON (r.child = child_p.vertex)
+        LEFT JOIN Edge partner_edges
+          ON (src_p.partner = partner_edges.src
+            and src_p.is_push)
+      WHERE
+        parent_p.partner <> src_p.vertex
+        AND COALESCE(partner_edges.dst, Edge.dst) <> parent_p.partner
+    )
+    SELECT
+      pc.*
+    FROM
+      pc
+        INNER JOIN vertex_property AS parent_p
+          ON (pc.parent = parent_p.vertex)
+        INNER JOIN vertex_property AS child_p
+          ON (pc.child = child_p.vertex)
+    WHERE
+      1 OR child_p.is_push
+
+  });
+
+}
+
+sub _create_neighbour_views {
+  my ($self) = @_;
+
+  # TODO: drop 
+  return;
+
+  $self->_dbh->do(q{
+    CREATE VIEW view_all_successors_up_to_partner AS
+    WITH RECURSIVE all_successors_up_to_partner(root, foo, v) AS (
+
+      SELECT
+        Edge.src AS root,
+        src_p.type = 'Input' AS foo,
+        Edge.dst AS v
+      FROM
+        Edge
+          INNER JOIN vertex_property as dst_p
+            ON (dst_p.vertex = Edge.dst)
+          INNER JOIN vertex_property as src_p
+            ON (src_p.vertex = Edge.src)
+      WHERE
+        src_p.partner IS NOT NULL
+
+      UNION
+
+      SELECT
+        r.root AS root,
+        src_p.type = 'Input' OR r.foo AS foo,
+        Edge.dst AS v
+      FROM Edge
+        INNER JOIN all_successors_up_to_partner AS r
+          ON (Edge.src = r.v)
+        INNER JOIN vertex_property AS src_p
+          ON (Edge.src = src_p.vertex)
+        INNER JOIN vertex_property AS dst_p
+          ON (Edge.dst = dst_p.vertex)
+        INNER JOIN vertex_property AS root_p
+          ON (r.root = root_p.vertex)
+      WHERE
+        root_p.partner <> src_p.vertex
+    )
+    SELECT * FROM all_successors_up_to_partner
+  });
+
+  $self->_dbh->do(q{
+    CREATE VIEW view_all_predecessors_up_to_partner AS
+    WITH RECURSIVE all_predecessors_up_to_partner(root, foo, v) AS (
+
+      SELECT
+        Edge.dst AS root,
+        dst_p.type = 'Input' AS foo,
+        Edge.src AS v
+      FROM
+        Edge
+          INNER JOIN vertex_property as dst_p
+            ON (dst_p.vertex = Edge.dst)
+          INNER JOIN vertex_property as src_p
+            ON (src_p.vertex = Edge.src)
+      WHERE
+        dst_p.partner IS NOT NULL
+
+      UNION
+
+      SELECT
+        r.root AS root,
+        dst_p.type = 'Input' OR r.foo AS foo,
+        Edge.src AS v
+      FROM Edge
+        INNER JOIN all_predecessors_up_to_partner AS r
+          ON (Edge.dst = r.v)
+        INNER JOIN vertex_property AS src_p
+          ON (Edge.src = src_p.vertex)
+        INNER JOIN vertex_property AS dst_p
+          ON (Edge.dst = dst_p.vertex)
+        INNER JOIN vertex_property AS root_p
+          ON (r.root = root_p.vertex)
+      WHERE
+        root_p.partner <> dst_p.vertex
+    )
+    SELECT * FROM all_predecessors_up_to_partner
+  });
 }
 
 sub _create_vertex_property_table {

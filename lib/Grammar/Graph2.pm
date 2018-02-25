@@ -28,7 +28,7 @@ sub vp_p1       { _rw_vertex_attribute('p1',       @_) }
 sub vp_p2       { _rw_vertex_attribute('p2',       @_) }
 sub vp_partner  { _rw_vertex_attribute('partner',  @_) }
 sub vp_run_list { _rw_vertex_attribute('run_list', @_) }
-
+sub vp_shadows  { _rw_vertex_attribute('shadows',  @_) }
 #####################################################################
 #
 #####################################################################
@@ -42,13 +42,11 @@ sub is_fi2_vertex      { vp_type(@_) eq 'Fi2'      }
 sub is_start_vertex    { vp_type(@_) eq 'Start'    }
 sub is_final_vertex    { vp_type(@_) eq 'Final'    }
 sub is_input_vertex    { vp_type(@_) eq 'Input'    }
-sub is_indirect_input_vertex    { vp_type(@_) eq 'IndirectInput'    }
 sub is_prelude_vertex  { vp_type(@_) eq 'Prelude'  }
 sub is_postlude_vertex { vp_type(@_) eq 'Postlude' }
 
 sub is_terminal_vertex {
   is_input_vertex(@_) or
-  is_indirect_input_vertex(@_) or
   is_prelude_vertex(@_) or
   is_postlude_vertex(@_) or
   0
@@ -151,7 +149,7 @@ sub from_grammar_graph {
 
     my $type = $old->vp_type($v);
 
-    if ($type eq 'Grammar::Formal::CharClass') {
+    if ($type eq 'charClass') {
       $self->vp_type($v, 'Input');
     } else {
       $self->vp_type($v, $type);

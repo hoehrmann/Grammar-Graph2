@@ -87,7 +87,9 @@ sub parse_to_ref_data {
         view_sibling_signature
     }),
     random_matches => [
-      uniq_by {
+      sort_by {
+        Storable::freeze(\$_)
+      } uniq_by {
         Storable::freeze(\$_)
       } map {
         $_->to_tree(pruned => 1)
@@ -98,7 +100,15 @@ sub parse_to_ref_data {
       } 1 .. 32
     ],
     all_matches => [
-      map { $_->to_tree(pruned => 1) } @all_matches
+      sort_by {
+        Storable::freeze(\$_)
+      } uniq_by {
+        Storable::freeze(\$_)
+      } map {
+        $_->to_tree(pruned => 1)
+      } grep {
+        defined
+      } @all_matches
     ]
   };
 }

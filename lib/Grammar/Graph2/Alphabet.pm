@@ -30,6 +30,9 @@ has '_log' => (
 sub first_ords {
   my ($self) = @_;
 
+  # TODO: make instead a representative_ords method that also
+  # supports open intervals?
+
   my @spans = 
     map { Set::IntSpan->new($_) }
     grep { defined }
