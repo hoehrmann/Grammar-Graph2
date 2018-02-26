@@ -55,6 +55,10 @@ sub create_t {
 
   $self->_create_vertex_property_table();
 
+  $self->_create_parent_child_view();
+
+  $self->_dbh->do(q{ ANALYZE });
+
   $self->_recompute_stack_properties();
 
   $self->_file_to_table();
@@ -77,7 +81,6 @@ sub create_t {
 
   $self->_create_neighbour_views();
 
-  $self->_create_parent_child_view();
 }
 
 sub create_match_enumerator {
@@ -809,7 +812,8 @@ sub _create_parent_child_view {
           INNER JOIN vertex_property as src_p
             ON (src_p.vertex = Edge.src)
       WHERE
-        src_p.is_push AND dst_p.vertex <> src_p.partner
+        src_p.is_push
+        -- AND dst_p.vertex <> src_p.partner
 
       UNION
 
@@ -832,7 +836,7 @@ sub _create_parent_child_view {
             and src_p.is_push)
       WHERE
         parent_p.partner <> src_p.vertex
-        AND COALESCE(partner_edges.dst, Edge.dst) <> parent_p.partner
+        -- AND COALESCE(partner_edges.dst, Edge.dst) <> parent_p.partner
     )
     SELECT
       pc.*
@@ -843,7 +847,8 @@ sub _create_parent_child_view {
         INNER JOIN vertex_property AS child_p
           ON (pc.child = child_p.vertex)
     WHERE
-      1 OR child_p.is_push
+      1
+      -- OR child_p.is_push
 
   });
 
@@ -968,7 +973,10 @@ sub _create_vertex_property_table {
       MAX(
         CASE WHEN an = 'type' AND av IN ('Final',
           'Fi', 'Fi1', 'Fi2') THEN 1 END
-      ) AS is_pop
+      ) AS is_pop,
+      NULL AS is_real_push,
+      NULL AS is_real_pop,
+      NULL AS is_real_stack
           
     FROM
       av
@@ -995,6 +1003,65 @@ sub _create_vertex_property_table {
 }
 
 sub _recompute_stack_properties {
+  my ($self) = @_;
+
+  # TODO(bh): report performance issue to SQLite
+
+  $self->_dbh->do(q{
+    CREATE TEMPORARY TABLE paradoxical AS
+    WITH paradoxical(paradox, partner) AS (
+      SELECT
+        pc.parent AS paradox,
+        parent_p.partner AS partner
+      FROM
+        view_parent_child pc
+          INNER JOIN vertex_property parent_p
+            ON (parent_p.vertex = pc.parent)
+          INNER JOIN vertex_property child_p
+            ON (child_p.vertex = pc.child)
+      WHERE
+        EXISTS (SELECT 1
+                FROM view_parent_child pc2
+                WHERE
+                  pc2.child = pc.parent
+                    AND pc2.parent = pc.child)
+    )
+    SELECT * FROM paradoxical
+  });
+
+  $self->_dbh->do(q{
+    CREATE INDEX idx_paradoxical
+      ON paradoxical(paradox, partner)
+  });
+
+  $self->_dbh->do(q{
+    UPDATE
+      vertex_property
+    SET
+      is_real_push
+        = EXISTS (SELECT 1
+                  FROM paradoxical p
+                  WHERE vertex_property.vertex = p.paradox),
+      is_real_pop
+        = EXISTS (SELECT 1
+                  FROM paradoxical p
+                  WHERE vertex_property.vertex = p.partner),
+      is_real_stack
+        = EXISTS (SELECT 1
+                  FROM paradoxical p
+                  WHERE vertex_property.vertex = p.paradox)
+          OR
+          EXISTS (SELECT 1
+                  FROM paradoxical p
+                  WHERE vertex_property.vertex = p.partner)
+  });
+
+  $self->_dbh->do(q{
+    DROP TABLE paradoxical
+  });
+}
+
+sub _recompute_stack_properties_old {
   my ($self) = @_;
 
   $self->_dbh->do(q{
@@ -1066,7 +1133,7 @@ sub _recompute_stack_properties {
       vertex_property
     SET
       is_push = 1,
-      is_pop = NULL,
+      is_pop = 0,
       is_stack = 1
     WHERE
       vertex = ?
