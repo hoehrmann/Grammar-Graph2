@@ -63,6 +63,9 @@ sub create_t {
 
   $self->_file_to_table();
   $self->_create_grammar_input_cross_product();
+
+  $self->_update_shadowed();
+
   $self->_create_without_unreachable_vertices();
 
   $self->_dbh->do(q{ ANALYZE });
@@ -198,6 +201,47 @@ sub _create_grammar_input_cross_product {
       dst_vertex
     )
   });
+}
+
+sub _update_shadowed {
+  my ($self) = @_;
+
+#  return;
+
+  $self->_dbh->do(q{
+    UPDATE OR REPLACE
+      testparser_all_edges
+    SET
+      src_vertex = (SELECT shadows
+                    FROM vertex_property
+                    WHERE testparser_all_edges.src_vertex
+                      = vertex_property.vertex)
+    WHERE
+      EXISTS (SELECT 1
+              FROM vertex_property
+              WHERE
+                testparser_all_edges.src_vertex
+                  = vertex_property.vertex
+                  AND shadows IS NOT NULL)
+  });
+
+  $self->_dbh->do(q{
+    UPDATE OR REPLACE
+      testparser_all_edges
+    SET
+      dst_vertex = (SELECT shadows
+                    FROM vertex_property
+                    WHERE testparser_all_edges.dst_vertex
+                      = vertex_property.vertex)
+    WHERE
+      EXISTS (SELECT 1
+              FROM vertex_property
+              WHERE
+                testparser_all_edges.dst_vertex
+                  = vertex_property.vertex
+                  AND shadows IS NOT NULL)
+  });
+
 }
 
 sub _create_without_unreachable_vertices {
@@ -961,7 +1005,8 @@ sub _create_vertex_property_table {
       MAX(CASE WHEN an = 'p1' THEN av END)      AS p1,
       MAX(CASE WHEN an = 'p2' THEN av END)      AS p2,
       MAX(CASE WHEN an = 'partner' THEN av END) AS partner,
-      MAX(CASE WHEN an = 'input' THEN av END)   AS input,
+--      MAX(CASE WHEN an = 'input' THEN av END)   AS input,
+      MAX(CASE WHEN an = 'shadows' THEN av END)   AS shadows,
       MAX(
         CASE WHEN an = 'type' AND av IN ('Start',
           'Final', 'If', 'If1', 'If2', 'Fi', 'Fi1', 'Fi2') THEN 1 END
