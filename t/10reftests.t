@@ -5,6 +5,8 @@ BEGIN {
   use lib '/home/bjoern/parselov/Graph-SomeUtils/lib';
   use lib '/home/bjoern/parselov/Graph-Feather/lib';
   use lib '/home/bjoern/parselov/Grammar-Graph2/lib';
+  use lib '/home/bjoern/parselov/Algorithm-ConstructDFA2/lib';
+
 };
 
 package main;

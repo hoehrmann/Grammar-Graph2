@@ -29,6 +29,7 @@ sub vp_p2       { _rw_vertex_attribute('p2',       @_) }
 sub vp_partner  { _rw_vertex_attribute('partner',  @_) }
 sub vp_run_list { _rw_vertex_attribute('run_list', @_) }
 sub vp_shadows  { _rw_vertex_attribute('shadows',  @_) }
+
 #####################################################################
 #
 #####################################################################

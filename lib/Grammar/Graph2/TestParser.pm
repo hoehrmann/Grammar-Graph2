@@ -10,6 +10,8 @@ use Log::Any qw//;
 use Types::Standard qw/:all/;
 use Grammar::Graph2::TestParser::MatchEnumerator;
 use List::Util qw/min max/;
+use Graph::SomeUtils qw/:all/;
+use Grammar::Graph2::Automata;
 
 has 'input_path' => (
   is       => 'ro',
@@ -51,11 +53,13 @@ sub BUILD {
 sub create_t {
   my ($self) = @_;
 
-  $self->_create_vertex_spans();
-
   $self->_create_vertex_property_table();
 
   $self->_create_parent_child_view();
+
+  $self->_replace_conditionals();
+
+  $self->_create_vertex_spans();
 
   $self->_dbh->do(q{ ANALYZE });
 
@@ -207,6 +211,8 @@ sub _update_shadowed {
   my ($self) = @_;
 
 #  return;
+
+  # TODO: crap code
 
   $self->_dbh->do(q{
     UPDATE OR REPLACE
@@ -1198,12 +1204,81 @@ sub _recompute_stack_properties_old {
 
 }
 
-
-
 #####################################################################
 # This stuff does not really belong here, and not with the other part
 #####################################################################
 
+sub _replace_conditionals {
+  my ($self) = @_;
+
+  my $p = $self;
+  my $g2 = $self->g;
+
+  $p->_create_vertex_property_table;
+  $p->_create_parent_child_view;
+
+  my @parent_child_edges = $p->_dbh->selectall_array(q{
+    SELECT parent, child FROM view_parent_child
+  });
+
+  my $gx = Graph::Directed->new(
+    edges => \@parent_child_edges,
+  );
+
+  my $scg = $gx->strongly_connected_graph;
+
+#  say for $scg->vertices;
+
+  for my $scc (reverse $scg->toposort) {
+    next unless $g2->is_if_vertex($scc);
+    _replace_if_fi_by_unmodified_dfa_vertices($g2, $scc);
+  }
+
+#  $p->_create_vertex_spans();
+  $p->_create_vertex_property_table();
+#  $p->_dbh->sqlite_backup_to_file('MATA-OUT.sqlite');
+
+}
+
+sub _replace_if_fi_by_unmodified_dfa_vertices {
+  my ($g2, $if) = @_;
+
+  # 
+  # ResolveConditionals.pm
+  # 
+
+  die unless $g2->is_if_vertex($if);
+
+  my (undef, $if1, $if2, $fi2, $fi1, $fi) =
+    $g2->conditionals_from_if($if);
+
+  my $subgraph = Graph::Feather->new(
+    edges => [ graph_edges_between($g2->g, $if, $fi) ],
+  );
+
+  return if grep {
+    $g2->is_if_vertex($_) and $_ ne $if
+  } $subgraph->vertices;
+
+  my $automata = Grammar::Graph2::Automata->new(
+    base_graph => $g2,
+  );
+
+  my $d = $automata->subgraph_automaton($subgraph, $if);
+
+  my $op = $g2->vp_name($if);
+
+  my @accepting = $d->cleanup_dead_states(sub {
+    my %set = map { $_ => 1 } @_;
+    return 1 if $set{$fi};
+  });
+
+  $automata->_shadow_subgraph_under_automaton($subgraph, $d);
+
+#  die if $g2->g->edges_at($if) or $g2->g->edges_at($fi);
+
+  return 1;
+}
 
 
 1;
