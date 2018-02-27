@@ -57,7 +57,7 @@ sub create_t {
 
   $self->_create_parent_child_view();
 
-  $self->_replace_conditionals();
+#  $self->_replace_conditionals();
 
   $self->_create_vertex_spans();
 
@@ -65,12 +65,14 @@ sub create_t {
 
   $self->_recompute_stack_properties();
 
+  $self->_create_view_productive_loops();
+
   $self->_file_to_table();
   $self->_create_grammar_input_cross_product();
 
-  $self->_update_shadowed();
-
   $self->_create_without_unreachable_vertices();
+
+  $self->_update_shadowed();
 
   $self->_dbh->do(q{ ANALYZE });
 
@@ -210,45 +212,44 @@ sub _create_grammar_input_cross_product {
 sub _update_shadowed {
   my ($self) = @_;
 
-#  return;
-
   # TODO: crap code
 
   $self->_dbh->do(q{
     UPDATE OR REPLACE
-      testparser_all_edges
+      result
     SET
       src_vertex = (SELECT shadows
                     FROM vertex_property
-                    WHERE testparser_all_edges.src_vertex
+                    WHERE result.src_vertex
                       = vertex_property.vertex)
     WHERE
       EXISTS (SELECT 1
               FROM vertex_property
               WHERE
-                testparser_all_edges.src_vertex
+                result.src_vertex
                   = vertex_property.vertex
                   AND shadows IS NOT NULL)
   });
 
   $self->_dbh->do(q{
     UPDATE OR REPLACE
-      testparser_all_edges
+      result
     SET
       dst_vertex = (SELECT shadows
                     FROM vertex_property
-                    WHERE testparser_all_edges.dst_vertex
+                    WHERE result.dst_vertex
                       = vertex_property.vertex)
     WHERE
       EXISTS (SELECT 1
               FROM vertex_property
               WHERE
-                testparser_all_edges.dst_vertex
+                result.dst_vertex
                   = vertex_property.vertex
                   AND shadows IS NOT NULL)
   });
 
 }
+
 
 sub _create_without_unreachable_vertices {
   my ($self) = @_;
@@ -1056,6 +1057,8 @@ sub _create_vertex_property_table {
 sub _recompute_stack_properties {
   my ($self) = @_;
 
+  # TODO: does not work when vertices are shadowed
+
   # TODO(bh): report performance issue to SQLite
 
   $self->_dbh->do(q{
@@ -1201,6 +1204,76 @@ sub _recompute_stack_properties_old {
       vertex = ?
   }, {}, $self->g->gp_final_vertex) if 0;
 
+}
+
+sub _create_view_productive_loops {
+
+  my ($self) = @_;
+
+  $self->_dbh->do(q{
+    DROP VIEW IF EXISTS view_productive_loops
+  });
+
+  $self->_dbh->do(q{
+    CREATE VIEW view_productive_loops AS
+    WITH RECURSIVE
+    paradoxical(parent, child) AS (
+      SELECT parent, child
+      FROM view_parent_child
+      INTERSECT
+      SELECT child, parent
+      FROM view_parent_child
+    ),
+    path(root, is_productive, dst) AS (
+      SELECT
+        src_p.vertex AS root,
+        0 AS is_productive,
+        dst_p.vertex AS dst
+      FROM
+        Edge
+          INNER JOIN vertex_property as dst_p
+            ON (dst_p.vertex = Edge.dst)
+          INNER JOIN vertex_property as src_p
+            ON (src_p.vertex = Edge.src)
+      WHERE
+        src_p.partner IS NOT NULL
+        AND src_p.vertex IN (SELECT parent FROM paradoxical)
+
+      UNION
+
+      SELECT
+        root_p.vertex AS root,
+        r.is_productive
+          OR src_p.type = 'Input' AS is_productive,
+        dst_p.vertex AS dst
+      FROM
+        path r
+          INNER JOIN Edge
+            ON (Edge.src = r.dst)
+          INNER JOIN vertex_property as src_p
+            ON (src_p.vertex = Edge.src)
+          INNER JOIN vertex_property as dst_p
+            ON (dst_p.vertex = Edge.dst)
+          INNER JOIN vertex_property as root_p
+            ON (root_p.vertex = r.root)
+            
+      WHERE
+        1 = 1
+        AND src_p.vertex <> r.root
+        AND src_p.vertex <> root_p.partner
+    )
+    SELECT
+      root AS vertex
+    FROM
+      path
+    WHERE
+      root = dst
+    GROUP BY
+      root,
+      dst
+    HAVING
+      MAX(is_productive) = 1
+  });
 
 }
 

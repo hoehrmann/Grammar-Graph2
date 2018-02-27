@@ -148,6 +148,9 @@ sub from_grammar_graph {
     $self->vp_run_list($v, $old->vp_run_list($v))
       if $old->g->has_vertex_attribute($v, 'run_list');
 
+    $self->vp_shadows($v, $old->vp_shadows($v))
+      if $old->g->has_vertex_attribute($v, 'shadows');
+
     my $type = $old->vp_type($v);
 
     if ($type eq 'charClass') {

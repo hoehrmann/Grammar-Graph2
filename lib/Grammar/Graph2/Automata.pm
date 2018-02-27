@@ -123,19 +123,8 @@ sub _copy_to_indirect {
     $g2->vp_shadows($id, $g2->vp_shadows($v) // $v);
   }
 
-  $g2->g->add_edge($id, $_)
-    for grep {
-#      not $subgraph->has_vertex($_);
-       1
-        }
-      $g2->g->successors($v);
-
-  $g2->g->add_edge($_, $id)
-    for grep { 
-#      not $subgraph->has_vertex($_);
-       1
-        }
-      $g2->g->predecessors($v);
+  $g2->g->add_edge($id, $_) for $g2->g->successors($v);
+  $g2->g->add_edge($_, $id) for $g2->g->predecessors($v);
 
 }
 
