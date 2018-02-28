@@ -47,21 +47,48 @@ sub BUILD {
   # FIXME(bh): stealing other module's dbh is bad
   $self->_dbh( $self->g->g->{dbh} );
 
-  $self->_create_view_vertex_property();
-  $self->_create_view_parent_child();
-  $self->_create_view_paradoxical();
-  $self->_create_view_productive_loops();
-  $self->_create_view_self_loop();
-  $self->_create_view_epsilon_closure();
+  local $self->g->g->{dbh}->{sqlite_allow_multiple_statements} = 1;
+
+  $self->_dbh->do(q{
+    DROP TABLE IF EXISTS t;
+    DROP TABLE IF EXISTS testparser_input;
+    DROP TABLE IF EXISTS testparser_all_edges;
+    DROP TABLE IF EXISTS result;
+    DROP VIEW IF EXISTS view_top_down_reachable;
+    DROP VIEW IF EXISTS view_parent_child_signature;
+    DROP VIEW IF EXISTS view_sibling_signature;
+
+
+
+
+
+    
+  });
+
 }
 
 # TODO: rename to compute_t or whatever
 sub create_t {
   my ($self) = @_;
 
-  $self->_create_vertex_property_table();
+  $self->_create_view_vertex_property();
+  $self->_create_view_parent_child();
+  $self->_create_view_paradoxical();
+  $self->_create_view_productive_loops();
+  $self->_create_view_self_loop();
+  $self->_create_view_epsilon_closure();
+
+  $self->_rematerialise_all_views();
 
   $self->_replace_conditionals();
+
+  $self->_rematerialise_all_views();
+
+  $self->_create_view_top_down_reachable();
+  $self->_create_view_parent_child_signature();
+  $self->_create_view_sibling_signature();
+
+  # materialised views have gone bad here
 
   $self->_create_vertex_spans();
 
@@ -83,14 +110,6 @@ sub create_t {
   $self->_dbh->do(q{ ANALYZE });
 
   $self->_create_trees_bottom_up();
-
-  $self->_create_top_down_reachable();
-
-  $self->_create_parent_child_signature();
-
-  $self->_create_sibling_signature();
-
-  $self->_create_neighbour_views();
 
 }
 
@@ -221,15 +240,15 @@ sub _update_shadowed {
       result
     SET
       src_vertex = (SELECT shadows
-                    FROM vertex_property
+                    FROM m_vertex_property
                     WHERE result.src_vertex
-                      = vertex_property.vertex)
+                      = m_vertex_property.vertex)
     WHERE
       EXISTS (SELECT 1
-              FROM vertex_property
+              FROM m_vertex_property
               WHERE
                 result.src_vertex
-                  = vertex_property.vertex
+                  = m_vertex_property.vertex
                   AND shadows IS NOT NULL)
   });
 
@@ -238,15 +257,15 @@ sub _update_shadowed {
       result
     SET
       dst_vertex = (SELECT shadows
-                    FROM vertex_property
+                    FROM m_vertex_property
                     WHERE result.dst_vertex
-                      = vertex_property.vertex)
+                      = m_vertex_property.vertex)
     WHERE
       EXISTS (SELECT 1
-              FROM vertex_property
+              FROM m_vertex_property
               WHERE
                 result.dst_vertex
-                  = vertex_property.vertex
+                  = m_vertex_property.vertex
                   AND shadows IS NOT NULL)
   });
 
@@ -398,7 +417,7 @@ sub _create_collapsed_to_stack_vertices {
         INNER JOIN planar right_
           ON (left_.dst_vertex = right_.src_vertex
             AND left_.dst_pos = right_.src_pos)
-        INNER JOIN vertex_property mid_p
+        INNER JOIN m_vertex_property mid_p
           ON (mid_p.vertex = left_.dst_vertex)
     WHERE
       mid_p.is_stack IS NULL
@@ -407,11 +426,11 @@ sub _create_collapsed_to_stack_vertices {
     p.*
   FROM
     planar p
-      INNER JOIN vertex_property src_p
+      INNER JOIN m_vertex_property src_p
         ON (src_p.vertex = p.src_vertex)
-      INNER JOIN vertex_property dst_p
+      INNER JOIN m_vertex_property dst_p
         ON (dst_p.vertex = p.dst_vertex)
-      LEFT JOIN vertex_property mid_src_p
+      LEFT JOIN m_vertex_property mid_src_p
         ON (mid_src_p.vertex = p.mid_src_vertex)
   WHERE
     1 = 1
@@ -457,13 +476,13 @@ sub _create_trees_bottom_up {
             ON (middle_.dst_pos = right_.src_pos
               AND middle_.dst_vertex = right_.src_vertex)
 
-          INNER JOIN vertex_property src_p
+          INNER JOIN m_vertex_property src_p
             ON (src_p.vertex = left_.src_vertex)
-          INNER JOIN vertex_property mid1_p
+          INNER JOIN m_vertex_property mid1_p
             ON (mid1_p.vertex = left_.dst_vertex)
-          INNER JOIN vertex_property mid2_p
+          INNER JOIN m_vertex_property mid2_p
             ON (mid2_p.vertex = right_.src_vertex)
-          INNER JOIN vertex_property dst_p
+          INNER JOIN m_vertex_property dst_p
             ON (dst_p.vertex = right_.dst_vertex)
 
           LEFT JOIN t if1fi
@@ -484,7 +503,7 @@ sub _create_trees_bottom_up {
             ON (pog.dst_pos = left_.src_pos
               AND pog.dst_vertex = left_.src_vertex)
 
-          LEFT JOIN vertex_property pog_p
+          LEFT JOIN m_vertex_property pog_p
             ON (pog_p.vertex = pog.src_vertex
               AND pog_p.is_push)
 
@@ -588,7 +607,7 @@ sub _create_trees_bottom_up {
           MIN(dst_pos - src_pos) AS min_distance
         FROM
           t
-            INNER JOIN vertex_property src_p
+            INNER JOIN m_vertex_property src_p
               ON (src_p.vertex = t.src_vertex)
         WHERE
           src_p.type IN ("If", "If1", "If2")
@@ -623,7 +642,7 @@ sub _create_trees_bottom_up {
 # ...
 #####################################################################
 
-sub _create_top_down_reachable {
+sub _create_view_top_down_reachable {
   my ($self) = @_;
 
   $self->_dbh->do(q{
@@ -680,7 +699,7 @@ sub _create_top_down_reachable {
   });
 }
 
-sub _create_parent_child_signature {
+sub _create_view_parent_child_signature {
   my ($self) = @_;
 
   $self->_dbh->do(q{
@@ -706,14 +725,14 @@ sub _create_parent_child_signature {
       view_top_down_reachable v_pc
         INNER JOIN t parent_child
           ON (parent_child.rowid = v_pc.id)
-        INNER JOIN vertex_property src_p
+        INNER JOIN m_vertex_property src_p
           ON (src_p.vertex = parent_child.src_vertex)
-        INNER JOIN vertex_property mid1_p
+        INNER JOIN m_vertex_property mid1_p
           ON (mid1_p.vertex = parent_child.mid_src_vertex
             AND mid1_p.is_push)
-        INNER JOIN vertex_property mid2_p
+        INNER JOIN m_vertex_property mid2_p
           ON (mid2_p.vertex = parent_child.mid_dst_vertex)
-        INNER JOIN vertex_property dst_p
+        INNER JOIN m_vertex_property dst_p
           ON (dst_p.vertex = parent_child.dst_vertex)
 
     UNION
@@ -737,9 +756,9 @@ sub _create_parent_child_signature {
       view_top_down_reachable v_pc
         INNER JOIN t 
           ON (t.rowid = v_pc.id)
-        INNER JOIN vertex_property src_p
+        INNER JOIN m_vertex_property src_p
           ON (src_p.vertex = t.src_vertex)
-        INNER JOIN vertex_property dst_p
+        INNER JOIN m_vertex_property dst_p
           ON (dst_p.vertex = t.dst_vertex)
     WHERE
       t.mid_dst_pos IS NULL
@@ -756,7 +775,7 @@ sub _create_parent_child_signature {
   });
 }
 
-sub _create_sibling_signature {
+sub _create_view_sibling_signature {
   my ($self) = @_;
 
   $self->_dbh->do(q{
@@ -777,10 +796,10 @@ sub _create_sibling_signature {
       view_top_down_reachable v_pc
         INNER JOIN t sibling
           ON (sibling.rowid = v_pc.id)
-        INNER JOIN vertex_property mid1_p
+        INNER JOIN m_vertex_property mid1_p
           ON (mid1_p.vertex = sibling.mid_src_vertex
             AND mid1_p.is_pop)
-        INNER JOIN vertex_property mid2_p
+        INNER JOIN m_vertex_property mid2_p
           ON (mid2_p.vertex = sibling.mid_dst_vertex)
 
     ORDER BY
@@ -860,9 +879,9 @@ sub _create_view_parent_child {
         Edge.dst AS child
       FROM
         Edge
-          INNER JOIN vertex_property as dst_p
+          INNER JOIN m_vertex_property as dst_p
             ON (dst_p.vertex = Edge.dst)
-          INNER JOIN vertex_property as src_p
+          INNER JOIN m_vertex_property as src_p
             ON (src_p.vertex = Edge.src)
       WHERE
         src_p.is_push
@@ -876,13 +895,13 @@ sub _create_view_parent_child {
       FROM Edge
         INNER JOIN pc AS r
           ON (Edge.src = r.child)
-        INNER JOIN vertex_property AS src_p
+        INNER JOIN m_vertex_property AS src_p
           ON (Edge.src = src_p.vertex)
-        INNER JOIN vertex_property AS dst_p
+        INNER JOIN m_vertex_property AS dst_p
           ON (Edge.dst = dst_p.vertex)
-        INNER JOIN vertex_property AS parent_p
+        INNER JOIN m_vertex_property AS parent_p
           ON (r.parent = parent_p.vertex)
-        INNER JOIN vertex_property AS child_p
+        INNER JOIN m_vertex_property AS child_p
           ON (r.child = child_p.vertex)
         LEFT JOIN Edge partner_edges
           ON (src_p.partner = partner_edges.src
@@ -895,9 +914,9 @@ sub _create_view_parent_child {
       pc.*
     FROM
       pc
-        INNER JOIN vertex_property AS parent_p
+        INNER JOIN m_vertex_property AS parent_p
           ON (pc.parent = parent_p.vertex)
-        INNER JOIN vertex_property AS child_p
+        INNER JOIN m_vertex_property AS child_p
           ON (pc.child = child_p.vertex)
     WHERE
       1
@@ -905,89 +924,6 @@ sub _create_view_parent_child {
 
   });
 
-}
-
-sub _create_neighbour_views {
-  my ($self) = @_;
-
-  # TODO: drop 
-  return;
-
-  $self->_dbh->do(q{
-    CREATE VIEW view_all_successors_up_to_partner AS
-    WITH RECURSIVE all_successors_up_to_partner(root, foo, v) AS (
-
-      SELECT
-        Edge.src AS root,
-        src_p.type = 'Input' AS foo,
-        Edge.dst AS v
-      FROM
-        Edge
-          INNER JOIN vertex_property as dst_p
-            ON (dst_p.vertex = Edge.dst)
-          INNER JOIN vertex_property as src_p
-            ON (src_p.vertex = Edge.src)
-      WHERE
-        src_p.partner IS NOT NULL
-
-      UNION
-
-      SELECT
-        r.root AS root,
-        src_p.type = 'Input' OR r.foo AS foo,
-        Edge.dst AS v
-      FROM Edge
-        INNER JOIN all_successors_up_to_partner AS r
-          ON (Edge.src = r.v)
-        INNER JOIN vertex_property AS src_p
-          ON (Edge.src = src_p.vertex)
-        INNER JOIN vertex_property AS dst_p
-          ON (Edge.dst = dst_p.vertex)
-        INNER JOIN vertex_property AS root_p
-          ON (r.root = root_p.vertex)
-      WHERE
-        root_p.partner <> src_p.vertex
-    )
-    SELECT * FROM all_successors_up_to_partner
-  });
-
-  $self->_dbh->do(q{
-    CREATE VIEW view_all_predecessors_up_to_partner AS
-    WITH RECURSIVE all_predecessors_up_to_partner(root, foo, v) AS (
-
-      SELECT
-        Edge.dst AS root,
-        dst_p.type = 'Input' AS foo,
-        Edge.src AS v
-      FROM
-        Edge
-          INNER JOIN vertex_property as dst_p
-            ON (dst_p.vertex = Edge.dst)
-          INNER JOIN vertex_property as src_p
-            ON (src_p.vertex = Edge.src)
-      WHERE
-        dst_p.partner IS NOT NULL
-
-      UNION
-
-      SELECT
-        r.root AS root,
-        dst_p.type = 'Input' OR r.foo AS foo,
-        Edge.src AS v
-      FROM Edge
-        INNER JOIN all_predecessors_up_to_partner AS r
-          ON (Edge.dst = r.v)
-        INNER JOIN vertex_property AS src_p
-          ON (Edge.src = src_p.vertex)
-        INNER JOIN vertex_property AS dst_p
-          ON (Edge.dst = dst_p.vertex)
-        INNER JOIN vertex_property AS root_p
-          ON (r.root = root_p.vertex)
-      WHERE
-        root_p.partner <> dst_p.vertex
-    )
-    SELECT * FROM all_predecessors_up_to_partner
-  });
 }
 
 sub _create_view_vertex_property {
@@ -1044,18 +980,18 @@ sub _create_vertex_property_table {
   my ($self) = @_;
 
   $self->_dbh->do(q{
-    DROP TABLE IF EXISTS vertex_property
+    DROP TABLE IF EXISTS m_vertex_property
   });
 
   $self->_dbh->do(q{
-    CREATE TABLE vertex_property AS
+    CREATE TABLE m_vertex_property AS
     SELECT * FROM view_vertex_property
   });
 
   $self->_dbh->do(q{
     CREATE UNIQUE INDEX
       idx_vertex_property_vertex
-    ON vertex_property(vertex)
+    ON m_vertex_property(vertex)
   });
 
 }
@@ -1072,7 +1008,7 @@ sub _create_view_epsilon_closure {
     WITH RECURSIVE
     all_e_successors_and_self(root, v) AS (
 
-      SELECT vertex AS root, vertex AS v FROM vertex_property
+      SELECT vertex AS root, vertex AS v FROM m_vertex_property
 
       UNION
 
@@ -1083,7 +1019,7 @@ sub _create_view_epsilon_closure {
         Edge
           INNER JOIN all_e_successors_and_self AS r
             ON (Edge.src = r.v)
-          INNER JOIN vertex_property AS src_p
+          INNER JOIN m_vertex_property AS src_p
             ON (Edge.src = src_p.vertex)
       WHERE
         src_p.type <> 'Input'
@@ -1100,19 +1036,6 @@ sub _create_view_epsilon_closure {
 sub _create_view_self_loop {
   my ($self) = @_;
 
-=pod
-
-  my $guard = $self->_transient(
-    [ 'view_parent_child' ],
-    [ 'view_productive_loops' ],
-    [ 'view_parent_child' ],
-    [ 'view_paradoxical' ],
-  );
-
-  $guard->finish();
-
-=cut
-
   $self->_dbh->do(q{
     DROP VIEW IF EXISTS view_self_loop
   });
@@ -1128,105 +1051,14 @@ sub _create_view_self_loop {
       ELSE 'no'
       END AS self_loop
     FROM
-      vertex_property src_p
-        LEFT JOIN view_paradoxical start_paradox
+      m_vertex_property src_p
+        LEFT JOIN m_paradoxical start_paradox
           ON (start_paradox.parent = src_p.vertex)
-        LEFT JOIN view_paradoxical final_paradox
+        LEFT JOIN m_paradoxical final_paradox
           ON (final_paradox.parent = src_p.partner)
-        LEFT JOIN view_productive_loops productive_loops
+        LEFT JOIN m_productive_loops productive_loops
           ON (productive_loops.vertex = src_p.vertex)
   });
-}
-
-sub _recompute_stack_properties_old {
-  my ($self) = @_;
-
-  $self->_dbh->do(q{
-    DROP VIEW IF EXISTS view_potential_stack_vertex
-  });
-
-  $self->_dbh->do(q{
-    CREATE VIEW view_potential_stack_vertex AS
-    WITH RECURSIVE all_successors_up_to_partner(root, v) AS (
-
-      SELECT
-        Edge.src AS root,
-        Edge.dst AS v
-      FROM
-        Edge
-
-      UNION
-
-      SELECT
-        r.root,
-        Edge.dst
-      FROM Edge
-        INNER JOIN all_successors_up_to_partner AS r
-          ON (Edge.src = r.v)
-        INNER JOIN vertex_property AS src_p
-          ON (Edge.src = src_p.vertex)
-        INNER JOIN vertex_property AS dst_p
-          ON (Edge.dst = dst_p.vertex)
-        INNER JOIN vertex_property AS root_p
-          ON (r.root = root_p.vertex)
-      WHERE
-        root_p.partner <> src_p.vertex
-    )
-    SELECT
-      root AS vertex,
-      v,
-      vp.*
-    FROM
-      all_successors_up_to_partner r
-        INNER JOIN vertex_property vp
-          ON (vp.vertex = v)
-    WHERE
-      root = v AND vp.is_stack
-  });
-
-  $self->_dbh->do(q{
-    UPDATE
-      vertex_property
-    SET
-      is_push = NULL,
-      is_pop = NULL,
-      is_stack = NULL
-    WHERE
-      NOT EXISTS (SELECT 1
-                  FROM view_potential_stack_vertex p
-                  WHERE 1 OR p.vertex = vertex_property.vertex)
-      AND
-      NOT EXISTS (SELECT 1
-                  FROM graph_attribute
-                  WHERE
-                    attribute_name IN ('start_vertex', 'final_vertex')
-                    AND attribute_value = vertex_property.vertex)
-      AND
-      type NOT IN ('If', 'If1', 'If2', 'Fi', 'Fi1', 'Fi2')
-  }) if 0;
-
-  $self->_dbh->do(q{
-    UPDATE
-      vertex_property
-    SET
-      is_push = 1,
-      is_pop = 0,
-      is_stack = 1
-    WHERE
-      vertex = ?
-  }, {}, $self->g->gp_start_vertex) if 0;
-
-  $self->_dbh->do(q{
-    UPDATE
-      vertex_property
-    SET
-      is_push = 0,
-      is_pop = 1,
-      is_stack = 1
-    WHERE
-      vertex = ?
-  }, {}, $self->g->gp_final_vertex) if 0;
-
 }
 
 sub _create_view_paradoxical {
@@ -1241,10 +1073,10 @@ sub _create_view_paradoxical {
     WITH RECURSIVE
     paradoxical(parent, child) AS (
       SELECT parent, child
-      FROM view_parent_child
+      FROM m_parent_child
       INTERSECT
       SELECT child, parent
-      FROM view_parent_child
+      FROM m_parent_child
     )
     SELECT
       parent,
@@ -1273,15 +1105,15 @@ sub _create_view_productive_loops {
         dst_p.vertex AS dst
       FROM
         Edge
-          INNER JOIN vertex_property as dst_p
+          INNER JOIN m_vertex_property as dst_p
             ON (dst_p.vertex = Edge.dst)
-          INNER JOIN vertex_property as src_p
+          INNER JOIN m_vertex_property as src_p
             ON (src_p.vertex = Edge.src)
       WHERE
         src_p.partner IS NOT NULL
         AND (
-          src_p.vertex IN (SELECT parent FROM view_paradoxical)
-          OR src_p.partner IN (SELECT parent FROM view_paradoxical)
+          src_p.vertex IN (SELECT parent FROM m_paradoxical)
+          OR src_p.partner IN (SELECT parent FROM m_paradoxical)
         )
 
       UNION
@@ -1295,11 +1127,11 @@ sub _create_view_productive_loops {
         path r
           INNER JOIN Edge
             ON (Edge.src = r.dst)
-          INNER JOIN vertex_property as src_p
+          INNER JOIN m_vertex_property as src_p
             ON (src_p.vertex = Edge.src)
-          INNER JOIN vertex_property as dst_p
+          INNER JOIN m_vertex_property as dst_p
             ON (dst_p.vertex = Edge.dst)
-          INNER JOIN vertex_property as root_p
+          INNER JOIN m_vertex_property as root_p
             ON (root_p.vertex = r.root)
             
       WHERE
@@ -1332,11 +1164,11 @@ sub _replace_conditionals {
   my $p = $self;
   my $g2 = $self->g;
 
-  $p->_create_vertex_property_table;
-  $p->_create_view_parent_child;
+#  $p->_create_vertex_property_table;
+#  $p->_create_view_parent_child;
 
   my @parent_child_edges = $p->_dbh->selectall_array(q{
-    SELECT parent, child FROM view_parent_child
+    SELECT parent, child FROM m_parent_child
   });
 
   my $gx = Graph::Directed->new(
@@ -1353,7 +1185,7 @@ sub _replace_conditionals {
   }
 
 #  $p->_create_vertex_spans();
-  $p->_create_vertex_property_table();
+#  $p->_create_vertex_property_table();
 #  $p->_dbh->sqlite_backup_to_file('MATA-OUT.sqlite');
 
 }
@@ -1438,8 +1270,10 @@ sub _rematerialise_all_views {
   my $ref = Graph::Directed->new;
 
   for my $view (@views) {
-    $ref->add_edge($view->[0], $_)
-      for $view->[1] =~ /\b(view_.*?)\b/g
+    $ref->add_vertex($view->[0]);
+    $ref->add_edge($view->[0], "view_$_")
+      for grep { $1 ne $view->[0] }
+        $view->[1] =~ /\bm_(.*?)\b/g
   }
 
   $ref->add_edge($_, 'view_vertex_property')
@@ -1451,29 +1285,47 @@ sub _rematerialise_all_views {
 
   die if grep { /\+/ } $ref->vertices;
 
-  eval {
+  if (0) {
+    eval {
+      $dbh->do(q{
+        DETACH DATABASE m
+      });
+    };
+
     $dbh->do(q{
-      DETACH DATABASE m
+      ATTACH DATABASE ':memory:' AS m
     });
-  };
+  }
 
-  $dbh->do(q{
-    ATTACH DATABASE ':memory:' AS m
-  });
+#  $dbh->begin_work();
 
-  $dbh->begin_work();
+#  use Data::Dumper;
+#  warn Dumper [ @order ];
 
   for my $view_name (reverse @order) {
     my $table_name = $view_name =~ s/^view_//ir;
+
+#warn "$table_name";
+
+    $dbh->do(sprintf(q{
+        DROP TABLE IF EXISTS %s
+      }, 
+      $dbh->quote_identifier(undef, 'main', "m_$table_name")
+    ));
+
     $dbh->do(sprintf(q{
         CREATE TABLE %s AS SELECT * FROM %s
       },
-      $dbh->quote_identifier(undef, 'm', $table_name),
-      $dbh->quote_identifier(undef, undef, $view_name)
+      $dbh->quote_identifier(undef, 'main', "m_$table_name"),
+      $dbh->quote_identifier(undef, 'main', $view_name)
     ));
   }
 
-  $dbh->commit;
+#die;
+
+#  $dbh->commit;
+#  $dbh->sqlite_backup_to_file('LOL.sqlite');
+#  die;
 
 }
 
@@ -1492,13 +1344,13 @@ __END__
           COALESCE(mid1_p.is_pop, 0) AS is_group
         FROM 
           t
-            INNER JOIN vertex_property src_p
+            INNER JOIN m_vertex_property src_p
               ON (src_p.vertex = t.src_vertex)
-            LEFT JOIN vertex_property mid1_p
+            LEFT JOIN m_vertex_property mid1_p
               ON (mid1_p.vertex = t.mid_src_vertex)
-            LEFT JOIN vertex_property mid2_p
+            LEFT JOIN m_vertex_property mid2_p
               ON (mid2_p.vertex = t.mid_dst_vertex)
-            INNER JOIN vertex_property dst_p
+            INNER JOIN m_vertex_property dst_p
               ON (dst_p.vertex = t.dst_vertex)
       )
 */
