@@ -1119,14 +1119,6 @@ sub _create_view_self_loop {
 
   $self->_dbh->do(q{
     CREATE VIEW view_self_loop AS
-    WITH
-    paradoxical(parent, child) AS (
-      SELECT parent, child
-      FROM view_parent_child
-      INTERSECT
-      SELECT child, parent
-      FROM view_parent_child
-    )
     SELECT
       src_p.vertex AS vertex,
       CASE
@@ -1137,9 +1129,9 @@ sub _create_view_self_loop {
       END AS self_loop
     FROM
       vertex_property src_p
-        LEFT JOIN paradoxical start_paradox
+        LEFT JOIN view_paradoxical start_paradox
           ON (start_paradox.parent = src_p.vertex)
-        LEFT JOIN paradoxical final_paradox
+        LEFT JOIN view_paradoxical final_paradox
           ON (final_paradox.parent = src_p.partner)
         LEFT JOIN view_productive_loops productive_loops
           ON (productive_loops.vertex = src_p.vertex)
@@ -1245,7 +1237,7 @@ sub _create_view_paradoxical {
   });
 
   $self->_dbh->do(q{
-    CREATE VIEW view_paradoxical(root, reachable) AS
+    CREATE VIEW view_paradoxical(parent, child) AS
     WITH RECURSIVE
     paradoxical(parent, child) AS (
       SELECT parent, child
@@ -1274,13 +1266,6 @@ sub _create_view_productive_loops {
   $self->_dbh->do(q{
     CREATE VIEW view_productive_loops AS
     WITH RECURSIVE
-    paradoxical(parent, child) AS (
-      SELECT parent, child
-      FROM view_parent_child
-      INTERSECT
-      SELECT child, parent
-      FROM view_parent_child
-    ),
     path(root, is_productive, dst) AS (
       SELECT
         src_p.vertex AS root,
@@ -1295,8 +1280,8 @@ sub _create_view_productive_loops {
       WHERE
         src_p.partner IS NOT NULL
         AND (
-          src_p.vertex IN (SELECT parent FROM paradoxical)
-          OR src_p.partner IN (SELECT parent FROM paradoxical)
+          src_p.vertex IN (SELECT parent FROM view_paradoxical)
+          OR src_p.partner IN (SELECT parent FROM view_paradoxical)
         )
 
       UNION
@@ -1431,6 +1416,67 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
 
   return 1;
 }
+
+#####################################################################
+#
+#####################################################################
+
+sub _rematerialise_all_views {
+  my ($self) = @_;
+
+  my $dbh = $self->_dbh;
+
+  my @views = $dbh->selectall_array(q{
+    SELECT
+      name, sql
+    FROM
+      sqlite_master
+    WHERE
+      type = 'view'
+  });
+
+  my $ref = Graph::Directed->new;
+
+  for my $view (@views) {
+    $ref->add_edge($view->[0], $_)
+      for $view->[1] =~ /\b(view_.*?)\b/g
+  }
+
+  $ref->add_edge($_, 'view_vertex_property')
+    for $ref->vertices;
+
+  my @order = $ref
+    ->strongly_connected_graph
+    ->toposort;
+
+  die if grep { /\+/ } $ref->vertices;
+
+  eval {
+    $dbh->do(q{
+      DETACH DATABASE m
+    });
+  };
+
+  $dbh->do(q{
+    ATTACH DATABASE ':memory:' AS m
+  });
+
+  $dbh->begin_work();
+
+  for my $view_name (reverse @order) {
+    my $table_name = $view_name =~ s/^view_//ir;
+    $dbh->do(sprintf(q{
+        CREATE TABLE %s AS SELECT * FROM %s
+      },
+      $dbh->quote_identifier(undef, 'm', $table_name),
+      $dbh->quote_identifier(undef, undef, $view_name)
+    ));
+  }
+
+  $dbh->commit;
+
+}
+
 
 
 1;
