@@ -48,7 +48,6 @@ sub BUILD {
   $self->_dbh( $self->g->g->{dbh} );
 }
 
-
 # TODO: rename to compute_t or whatever
 sub create_t {
   my ($self) = @_;
@@ -66,6 +65,8 @@ sub create_t {
   $self->_recompute_stack_properties();
 
   $self->_create_view_productive_loops();
+
+  $self->_create_view_self_loop();
 
   $self->_file_to_table();
   $self->_create_grammar_input_cross_product();
@@ -1115,6 +1116,55 @@ sub _recompute_stack_properties {
   });
 }
 
+sub _create_view_self_loop {
+  my ($self) = @_;
+
+=pod
+
+  my $guard = $self->_transient(
+    [ 'view_parent_child' ],
+    [ 'view_productive_loops' ],
+    [ 'view_parent_child' ],
+    [ 'view_paradoxical' ],
+  );
+
+  $guard->finish();
+
+=cut
+
+  $self->_dbh->do(q{
+    DROP VIEW IF EXISTS view_self_loop
+  });
+
+  $self->_dbh->do(q{
+    CREATE VIEW view_self_loop AS
+    WITH
+    paradoxical(parent, child) AS (
+      SELECT parent, child
+      FROM view_parent_child
+      INTERSECT
+      SELECT child, parent
+      FROM view_parent_child
+    )
+    SELECT
+      src_p.vertex AS vertex,
+      CASE
+      WHEN (productive_loops.vertex IS NOT NULL) THEN 'irregular'
+      WHEN (start_paradox.parent IS NOT NULL) THEN 'linear'
+      WHEN (final_paradox.parent IS NOT NULL) THEN 'linear'
+      ELSE 'no'
+      END AS self_loop
+    FROM
+      view_vertex_property src_p
+        LEFT JOIN paradoxical start_paradox
+          ON (start_paradox.parent = src_p.vertex)
+        LEFT JOIN paradoxical final_paradox
+          ON (final_paradox.parent = src_p.partner)
+        LEFT JOIN view_productive_loops productive_loops
+          ON (productive_loops.vertex = src_p.vertex)
+  });
+}
+
 sub _recompute_stack_properties_old {
   my ($self) = @_;
 
@@ -1237,7 +1287,10 @@ sub _create_view_productive_loops {
             ON (src_p.vertex = Edge.src)
       WHERE
         src_p.partner IS NOT NULL
-        AND src_p.vertex IN (SELECT parent FROM paradoxical)
+        AND (
+          src_p.vertex IN (SELECT parent FROM paradoxical)
+          OR src_p.partner IN (SELECT parent FROM paradoxical)
+        )
 
       UNION
 
@@ -1343,7 +1396,26 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
 
   my @accepting = $d->cleanup_dead_states(sub {
     my %set = map { $_ => 1 } @_;
-    return 1 if $set{$fi};
+
+    if ($op eq '#ordered_choice') {
+      return $set{$fi1} || $set{$fi2};
+    }
+
+    if ($op eq '#ordered_conjunction') {
+      return $set{$fi1} && $set{$fi2};
+    }
+
+    if ($op eq '#conjunction') {
+      return $set{$fi1} && $set{$fi2};
+    }
+
+    if ($op eq '#conjunction') {
+      if (0) { # if if2 is regular
+        return not $set{$fi2};
+      }
+    }
+
+    return $set{$fi};
   });
 
   $automata->_shadow_subgraph_under_automaton($subgraph, $d);
