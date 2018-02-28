@@ -49,6 +49,7 @@ sub BUILD {
 
   $self->_create_view_vertex_property();
   $self->_create_view_parent_child();
+  $self->_create_view_paradoxical();
   $self->_create_view_productive_loops();
   $self->_create_view_self_loop();
   $self->_create_view_epsilon_closure();
@@ -1233,6 +1234,32 @@ sub _recompute_stack_properties_old {
     WHERE
       vertex = ?
   }, {}, $self->g->gp_final_vertex) if 0;
+
+}
+
+sub _create_view_paradoxical {
+  my ($self) = @_;
+
+  $self->_dbh->do(q{
+    DROP VIEW IF EXISTS view_paradoxical
+  });
+
+  $self->_dbh->do(q{
+    CREATE VIEW view_paradoxical(root, reachable) AS
+    WITH RECURSIVE
+    paradoxical(parent, child) AS (
+      SELECT parent, child
+      FROM view_parent_child
+      INTERSECT
+      SELECT child, parent
+      FROM view_parent_child
+    )
+    SELECT
+      parent,
+      child
+    FROM
+      paradoxical
+  });
 
 }
 
