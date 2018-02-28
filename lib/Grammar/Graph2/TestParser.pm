@@ -46,6 +46,12 @@ sub BUILD {
 
   # FIXME(bh): stealing other module's dbh is bad
   $self->_dbh( $self->g->g->{dbh} );
+
+  $self->_create_view_vertex_property();
+  $self->_create_view_parent_child();
+  $self->_create_view_productive_loops();
+  $self->_create_view_self_loop();
+  $self->_create_view_epsilon_closure();
 }
 
 # TODO: rename to compute_t or whatever
@@ -54,25 +60,19 @@ sub create_t {
 
   $self->_create_vertex_property_table();
 
-  $self->_create_parent_child_view();
-
-#  $self->_replace_conditionals();
+  $self->_replace_conditionals();
 
   $self->_create_vertex_spans();
 
   $self->_dbh->do(q{ ANALYZE });
 
-  $self->_recompute_stack_properties();
-
-  $self->_create_view_productive_loops();
-
-  $self->_create_view_self_loop();
-
   $self->_file_to_table();
+
   $self->_create_grammar_input_cross_product();
 
   $self->_create_without_unreachable_vertices();
 
+  # undoes _replace_conditionals
   $self->_update_shadowed();
 
   $self->_dbh->do(q{ ANALYZE });
@@ -842,7 +842,7 @@ sub _create_vertex_spans {
 
 }
 
-sub _create_parent_child_view {
+sub _create_view_parent_child {
   my ($self) = @_;
 
   $self->_dbh->do(q{
@@ -989,7 +989,7 @@ sub _create_neighbour_views {
   });
 }
 
-sub _create_vertex_property_table {
+sub _create_view_vertex_property {
   my ($self) = @_;
 
   $self->_dbh->do(q{
@@ -1027,9 +1027,7 @@ sub _create_vertex_property_table {
         CASE WHEN an = 'type' AND av IN ('Final',
           'Fi', 'Fi1', 'Fi2') THEN 1 END
       ) AS is_pop,
-      NULL AS is_real_push,
-      NULL AS is_real_pop,
-      NULL AS is_real_stack
+      NULL AS self_loop
           
     FROM
       av
@@ -1038,6 +1036,11 @@ sub _create_vertex_property_table {
     ORDER BY
       vertex
   });
+
+}
+
+sub _create_vertex_property_table {
+  my ($self) = @_;
 
   $self->_dbh->do(q{
     DROP TABLE IF EXISTS vertex_property
@@ -1053,67 +1056,44 @@ sub _create_vertex_property_table {
       idx_vertex_property_vertex
     ON vertex_property(vertex)
   });
+
 }
 
-sub _recompute_stack_properties {
+sub _create_view_epsilon_closure {
   my ($self) = @_;
 
-  # TODO: does not work when vertices are shadowed
-
-  # TODO(bh): report performance issue to SQLite
+  $self->_dbh->do(q{
+    DROP VIEW IF EXISTS view_epsilon_closure
+  });
 
   $self->_dbh->do(q{
-    CREATE TEMPORARY TABLE paradoxical AS
-    WITH paradoxical(paradox, partner) AS (
+    CREATE VIEW view_epsilon_closure(vertex, e_reachable) AS
+    WITH RECURSIVE
+    all_e_successors_and_self(root, v) AS (
+
+      SELECT vertex AS root, vertex AS v FROM vertex_property
+
+      UNION
+
       SELECT
-        pc.parent AS paradox,
-        parent_p.partner AS partner
+        r.root,
+        Edge.dst
       FROM
-        view_parent_child pc
-          INNER JOIN vertex_property parent_p
-            ON (parent_p.vertex = pc.parent)
-          INNER JOIN vertex_property child_p
-            ON (child_p.vertex = pc.child)
+        Edge
+          INNER JOIN all_e_successors_and_self AS r
+            ON (Edge.src = r.v)
+          INNER JOIN vertex_property AS src_p
+            ON (Edge.src = src_p.vertex)
       WHERE
-        EXISTS (SELECT 1
-                FROM view_parent_child pc2
-                WHERE
-                  pc2.child = pc.parent
-                    AND pc2.parent = pc.child)
+        src_p.type <> 'Input'
     )
-    SELECT * FROM paradoxical
+    SELECT
+      root AS vertex,
+      v AS e_reachable
+    FROM
+      all_e_successors_and_self
   });
 
-  $self->_dbh->do(q{
-    CREATE INDEX idx_paradoxical
-      ON paradoxical(paradox, partner)
-  });
-
-  $self->_dbh->do(q{
-    UPDATE
-      vertex_property
-    SET
-      is_real_push
-        = EXISTS (SELECT 1
-                  FROM paradoxical p
-                  WHERE vertex_property.vertex = p.paradox),
-      is_real_pop
-        = EXISTS (SELECT 1
-                  FROM paradoxical p
-                  WHERE vertex_property.vertex = p.partner),
-      is_real_stack
-        = EXISTS (SELECT 1
-                  FROM paradoxical p
-                  WHERE vertex_property.vertex = p.paradox)
-          OR
-          EXISTS (SELECT 1
-                  FROM paradoxical p
-                  WHERE vertex_property.vertex = p.partner)
-  });
-
-  $self->_dbh->do(q{
-    DROP TABLE paradoxical
-  });
 }
 
 sub _create_view_self_loop {
@@ -1155,7 +1135,7 @@ sub _create_view_self_loop {
       ELSE 'no'
       END AS self_loop
     FROM
-      view_vertex_property src_p
+      vertex_property src_p
         LEFT JOIN paradoxical start_paradox
           ON (start_paradox.parent = src_p.vertex)
         LEFT JOIN paradoxical final_paradox
@@ -1341,7 +1321,7 @@ sub _replace_conditionals {
   my $g2 = $self->g;
 
   $p->_create_vertex_property_table;
-  $p->_create_parent_child_view;
+  $p->_create_view_parent_child;
 
   my @parent_child_edges = $p->_dbh->selectall_array(q{
     SELECT parent, child FROM view_parent_child
