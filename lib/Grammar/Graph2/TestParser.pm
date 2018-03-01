@@ -93,7 +93,9 @@ sub BUILD {
         CASE WHEN an = 'type' AND av IN ('Final',
           'Fi', 'Fi1', 'Fi2') THEN 1 END
       ) AS is_pop,
-      MAX(CASE WHEN an = 'self_loop' THEN av END)   AS self_loop
+      MAX(CASE WHEN an = 'self_loop' THEN av END)   AS self_loop,
+      MAX(CASE WHEN an = 'epsilon_key' THEN av END)   AS epsilon_key,
+      MAX(CASE WHEN an = 'epsilon_group' THEN av END)   AS epsilon_group
           
     FROM
       av
@@ -306,6 +308,7 @@ sub BUILD {
   $self->_rematerialise_all_views();
 
   $self->_add_self_loop_attributes();
+  $self->_add_topological_attributes();
 
   $self->_rematerialise_all_views();
 
@@ -331,6 +334,48 @@ sub _add_self_loop_attributes {
 
   $self->g->g->set_vertex_attribute(@$_)
     for @self_loop;
+}
+
+sub _add_topological_attributes {
+  my ($self) = @_;
+
+  my $d = Graph::Directed->new;
+
+  $d->add_edges(
+    $self->_dbh->selectall_array(q{
+      SELECT
+        src,
+        dst
+      FROM
+        Edge
+          INNER JOIN m_vertex_property src_p
+            ON (src_p.vertex = Edge.src)
+      WHERE
+        src_p.type <> 'Input'
+    })
+  );
+
+  my $scg = $d->strongly_connected_graph;
+
+  my @order = $scg->toposort;
+
+  my $json = JSON->new
+    ->canonical(1)
+    ->ascii(1)
+    ->indent(0);
+
+  while (@order) {
+    my $current = shift @order;
+    $self->g->g->set_vertex_attribute($_, 'epsilon_key', 2 + $#order)
+      for split/\+/, $current;
+
+#    next unless $current =~ /\+/;
+
+    $self->g->g->set_vertex_attribute($_, 'epsilon_group',
+      $json->encode([ split/\+/, $current])
+    ) for split/\+/, $current;
+
+  }
 }
 
 # TODO: rename to compute_t or whatever
@@ -514,6 +559,60 @@ sub _update_shadowed {
 
 }
 
+sub _create_without_unreachable_vertices_new {
+  my ($self) = @_;
+
+  $self->_dbh->do(q{
+    DROP TABLE IF EXISTS result
+  });
+
+q{
+
+  testparser_all_edges
+  ORDER BY
+    src_pos,
+    src_p.epsilon_key,
+    dst_pos,
+    dst_p.epsilon_key
+
+
+WITH
+adjunct(vertex, adjunct) AS (
+  SELECT
+    vertex,
+    value
+  FROM
+    m_vertex_property vp
+      INNER JOIN json_each(vp.epsilon_group)
+)
+SELECT DISTINCT
+  src_pos,
+  src_each.vertex AS src_vertex,
+  dst_pos,
+  dst_each.vertex AS dst_vertex
+FROM
+  testparser_all_edges ta
+    INNER JOIN m_vertex_property src_p
+      ON (src_p.vertex = ta.src_vertex)
+    INNER JOIN m_vertex_property dst_p
+      ON (dst_p.vertex = ta.dst_vertex)
+    INNER JOIN adjunct src_each
+      ON (src_each.vertex = src_p.vertex)
+    INNER JOIN adjunct dst_each
+      ON (dst_each.vertex = dst_p.vertex)
+ORDER BY
+  src_pos,
+  src_p.epsilon_key,
+  dst_pos,
+  dst_p.epsilon_key
+
+
+    
+
+};
+
+  # ...
+}
 
 sub _create_without_unreachable_vertices {
   my ($self) = @_;
@@ -1193,6 +1292,10 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
 
   my $op = $g2->vp_name($if);
 
+  # TODO: ...
+  my $if1_regular = 0;
+  my $if2_regular = 0;
+
   my @accepting = $d->cleanup_dead_states(sub {
     my %set = map { $_ => 1 } @_;
 
@@ -1208,8 +1311,8 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
       return $set{$fi1} && $set{$fi2};
     }
 
-    if ($op eq '#conjunction') {
-      if (0) { # if if2 is regular
+    if ($op eq '#exclusion') {
+      if ($if2_regular) {
         return not $set{$fi2};
       }
     }
@@ -1217,9 +1320,20 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
     return $set{$fi};
   });
 
-  $automata->_shadow_subgraph_under_automaton($subgraph, $d);
+  if ($op eq '#ordered_choice' and $if1_regular) {
+    my $sth = $d->_dbh->prepare(q{
+      DELETE FROM Configuration
+      WHERE vertex = ?
+        AND EXISTS (SELECT 1
+                    FROM Configuration c2
+                    WHERE c2.state = Configuration.state
+                      AND c2.vertex = ?)
+    });
+    $sth->execute($fi2, $fi1);
+    $sth->finish();
+  }
 
-#  die if $g2->g->edges_at($if) or $g2->g->edges_at($fi);
+  $automata->_shadow_subgraph_under_automaton($subgraph, $d);
 
   return 1;
 }
