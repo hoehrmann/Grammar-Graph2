@@ -308,11 +308,12 @@ sub BUILD {
   $self->_rematerialise_all_views();
 
   $self->_add_self_loop_attributes();
-  $self->_add_topological_attributes();
 
   $self->_rematerialise_all_views();
 
   $self->_replace_conditionals();
+
+  $self->_add_topological_attributes();
   
   $self->_rematerialise_all_views();
 
@@ -341,6 +342,15 @@ sub _add_topological_attributes {
 
   my $d = Graph::Directed->new;
 
+  $d->add_vertices(
+    map { @$_ } $self->_dbh->selectall_array(q{
+      SELECT
+        src_p.vertex
+      FROM
+        m_vertex_property src_p
+    })
+  );
+
   $d->add_edges(
     $self->_dbh->selectall_array(q{
       SELECT
@@ -356,8 +366,44 @@ sub _add_topological_attributes {
   );
 
   my $scg = $d->strongly_connected_graph;
+  my $scgf = Graph::Feather->new(
+    vertices => [ $scg->vertices ],
+    edges => [ $scg->edges ],
+  );
 
-  my @order = $scg->toposort;
+  my @order = $scgf->{dbh}->selectall_array(q{
+    WITH RECURSIVE
+    roots(vertex) AS (
+      SELECT DISTINCT
+        v.vertex_name AS vertex
+      FROM
+        vertex v
+          LEFT JOIN Edge successors
+            ON (successors.src = v.vertex_name)
+          LEFT JOIN Edge predecessors
+            ON (predecessors.dst = v.vertex_name)
+      WHERE
+        predecessors.src IS NULL
+    ),
+    dfs(vertex, depth) AS (
+      SELECT
+        vertex,
+        0 AS depth
+      FROM roots
+      UNION ALL
+      SELECT
+        e.dst AS vertex,
+        depth + 1 AS depth
+      FROM dfs
+        INNER JOIN Edge e
+          ON (e.src = dfs.vertex)
+    ),
+    topology(vertex, max_depth, min_depth) AS (
+      SELECT vertex, MAX(depth), MIN(depth) FROM dfs
+      GROUP BY vertex
+    )
+    SELECT * FROM topology ORDER BY max_depth DESC
+  });
 
   my $json = JSON->new
     ->canonical(1)
@@ -366,14 +412,14 @@ sub _add_topological_attributes {
 
   while (@order) {
     my $current = shift @order;
-    $self->g->g->set_vertex_attribute($_, 'epsilon_key', 2 + $#order)
-      for split/\+/, $current;
+    $self->g->g->set_vertex_attribute($_, 'epsilon_key', $current->[1])
+      for split/\+/, $current->[0];
 
 #    next unless $current =~ /\+/;
 
     $self->g->g->set_vertex_attribute($_, 'epsilon_group',
-      $json->encode([ split/\+/, $current])
-    ) for split/\+/, $current;
+      $json->encode([ split/\+/, $current->[0]])
+    ) for split/\+/, $current->[0];
 
   }
 }
@@ -568,28 +614,20 @@ sub _create_without_unreachable_vertices_new {
 
 q{
 
-  testparser_all_edges
-  ORDER BY
-    src_pos,
-    src_p.epsilon_key,
-    dst_pos,
-    dst_p.epsilon_key
-
-
 WITH
 adjunct(vertex, adjunct) AS (
   SELECT
     vertex,
-    value
+    scc.value
   FROM
     m_vertex_property vp
-      INNER JOIN json_each(vp.epsilon_group)
+      INNER JOIN json_each(vp.epsilon_group) scc
 )
 SELECT DISTINCT
   src_pos,
-  src_each.vertex AS src_vertex,
+  src_each.adjunct AS src_vertex,
   dst_pos,
-  dst_each.vertex AS dst_vertex
+  dst_each.adjunct AS dst_vertex
 FROM
   testparser_all_edges ta
     INNER JOIN m_vertex_property src_p
