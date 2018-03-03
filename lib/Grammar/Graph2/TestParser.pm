@@ -15,9 +15,6 @@ use Grammar::Graph2::Automata;
 use List::OrderBy;
 use List::StackBy;
 
-# Mixins
-
-
 has 'input_path' => (
   is       => 'ro',
   required => 1,
@@ -66,7 +63,9 @@ sub BUILD {
     -----------------------------------------------------------------
     -- view_vertex_property
     -----------------------------------------------------------------
-
+    DROP VIEW IF EXISTS view_vertex_property;
+    CREATE VIEW view_vertex_property AS SELECT * FROM vertex_property;
+/*
     DROP VIEW IF EXISTS view_vertex_property;
     CREATE VIEW view_vertex_property AS
     WITH av AS (
@@ -109,7 +108,7 @@ sub BUILD {
     ORDER BY
       vertex
     ;
-
+*/
     -----------------------------------------------------------------
     -- view_parent_child
     -----------------------------------------------------------------
@@ -123,9 +122,9 @@ sub BUILD {
         Edge.dst AS child
       FROM
         Edge
-          INNER JOIN m_vertex_property as dst_p
+          INNER JOIN vertex_property as dst_p
             ON (dst_p.vertex = Edge.dst)
-          INNER JOIN m_vertex_property as src_p
+          INNER JOIN vertex_property as src_p
             ON (src_p.vertex = Edge.src)
       WHERE
         src_p.is_push
@@ -139,13 +138,13 @@ sub BUILD {
       FROM Edge
         INNER JOIN pc AS r
           ON (Edge.src = r.child)
-        INNER JOIN m_vertex_property AS src_p
+        INNER JOIN vertex_property AS src_p
           ON (Edge.src = src_p.vertex)
-        INNER JOIN m_vertex_property AS dst_p
+        INNER JOIN vertex_property AS dst_p
           ON (Edge.dst = dst_p.vertex)
-        INNER JOIN m_vertex_property AS parent_p
+        INNER JOIN vertex_property AS parent_p
           ON (r.parent = parent_p.vertex)
-        INNER JOIN m_vertex_property AS child_p
+        INNER JOIN vertex_property AS child_p
           ON (r.child = child_p.vertex)
         LEFT JOIN Edge partner_edges
           ON (src_p.partner = partner_edges.src
@@ -158,9 +157,9 @@ sub BUILD {
       pc.*
     FROM
       pc
-        INNER JOIN m_vertex_property AS parent_p
+        INNER JOIN vertex_property AS parent_p
           ON (pc.parent = parent_p.vertex)
-        INNER JOIN m_vertex_property AS child_p
+        INNER JOIN vertex_property AS child_p
           ON (pc.child = child_p.vertex)
     WHERE
       1
@@ -177,10 +176,10 @@ sub BUILD {
     WITH RECURSIVE
     paradoxical(parent, child) AS (
       SELECT parent, child
-      FROM m_parent_child
+      FROM view_parent_child
       INTERSECT
       SELECT child, parent
-      FROM m_parent_child
+      FROM view_parent_child
     )
     SELECT
       parent,
@@ -203,15 +202,15 @@ sub BUILD {
         dst_p.vertex AS dst
       FROM
         Edge
-          INNER JOIN m_vertex_property as dst_p
+          INNER JOIN vertex_property as dst_p
             ON (dst_p.vertex = Edge.dst)
-          INNER JOIN m_vertex_property as src_p
+          INNER JOIN vertex_property as src_p
             ON (src_p.vertex = Edge.src)
       WHERE
         src_p.partner IS NOT NULL
         AND (
-          src_p.vertex IN (SELECT parent FROM m_paradoxical)
-          OR src_p.partner IN (SELECT parent FROM m_paradoxical)
+          src_p.vertex IN (SELECT parent FROM view_paradoxical)
+          OR src_p.partner IN (SELECT parent FROM view_paradoxical)
         )
 
       UNION
@@ -225,11 +224,11 @@ sub BUILD {
         path r
           INNER JOIN Edge
             ON (Edge.src = r.dst)
-          INNER JOIN m_vertex_property as src_p
+          INNER JOIN vertex_property as src_p
             ON (src_p.vertex = Edge.src)
-          INNER JOIN m_vertex_property as dst_p
+          INNER JOIN vertex_property as dst_p
             ON (dst_p.vertex = Edge.dst)
-          INNER JOIN m_vertex_property as root_p
+          INNER JOIN vertex_property as root_p
             ON (root_p.vertex = r.root)
             
       WHERE
@@ -266,12 +265,12 @@ sub BUILD {
       ELSE 'no'
       END AS self_loop
     FROM
-      m_vertex_property src_p
-        LEFT JOIN m_paradoxical start_paradox
+      vertex_property src_p
+        LEFT JOIN view_paradoxical start_paradox
           ON (start_paradox.parent = src_p.vertex)
-        LEFT JOIN m_paradoxical final_paradox
+        LEFT JOIN view_paradoxical final_paradox
           ON (final_paradox.parent = src_p.partner)
-        LEFT JOIN m_productive_loops productive_loops
+        LEFT JOIN view_productive_loops productive_loops
           ON (productive_loops.vertex = src_p.vertex)
 
     ;
@@ -285,7 +284,7 @@ sub BUILD {
     WITH RECURSIVE
     all_e_successors_and_self(root, v) AS (
 
-      SELECT vertex AS root, vertex AS v FROM m_vertex_property
+      SELECT vertex AS root, vertex AS v FROM vertex_property
 
       UNION
 
@@ -296,7 +295,7 @@ sub BUILD {
         Edge
           INNER JOIN all_e_successors_and_self AS r
             ON (Edge.src = r.v)
-          INNER JOIN m_vertex_property AS src_p
+          INNER JOIN vertex_property AS src_p
             ON (Edge.src = src_p.vertex)
       WHERE
         src_p.type <> 'Input'
@@ -310,24 +309,10 @@ sub BUILD {
 
   });
 
-  $self->_rematerialise_all_views();
-
   $self->_add_self_loop_attributes();
-
-  $self->_rematerialise_all_views();
-
   $self->_replace_conditionals();
-
-  $self->_rematerialise_all_views();
-
-  $self->_add_self_loop_attributes();
-
-  $self->_rematerialise_all_views();
-
   $self->_add_topological_attributes();
   
-  $self->_rematerialise_all_views();
-
   $self->_create_view_top_down_reachable();
   $self->_create_view_parent_child_signature();
   $self->_create_view_sibling_signature();
@@ -340,11 +325,11 @@ sub _add_self_loop_attributes {
   my ($self) = @_;
 
   my @self_loop = $self->_dbh->selectall_array(q{
-    SELECT vertex, 'self_loop', self_loop
-    FROM m_self_loop
+    SELECT vertex, self_loop
+    FROM view_self_loop
   });
 
-  $self->g->g->set_vertex_attribute(@$_)
+  $self->g->vp_self_loop(@$_)
     for @self_loop;
 }
 
@@ -412,7 +397,7 @@ sub _topo_parent_child {
       SELECT
         src_p.vertex
       FROM
-        m_vertex_property src_p
+        vertex_property src_p
     })
   );
 
@@ -423,9 +408,9 @@ sub _topo_parent_child {
         pc.child AS child
       FROM
         view_parent_child pc
-          INNER JOIN m_vertex_property parent_p
+          INNER JOIN vertex_property parent_p
             ON (pc.parent = parent_p.vertex)
-          INNER JOIN m_vertex_property child_p
+          INNER JOIN vertex_property child_p
             ON (pc.child = child_p.vertex)
 
     })
@@ -444,7 +429,7 @@ sub _topo_epsilon {
       SELECT
         src_p.vertex
       FROM
-        m_vertex_property src_p
+        vertex_property src_p
     })
   );
 
@@ -455,7 +440,7 @@ sub _topo_epsilon {
         dst
       FROM
         Edge
-          INNER JOIN m_vertex_property src_p
+          INNER JOIN vertex_property src_p
             ON (src_p.vertex = Edge.src)
       WHERE
         src_p.type <> 'Input'
@@ -489,14 +474,14 @@ use YAML::XS;
 warn Dump {
   t1 => $t1,
   t2 => $t2,
-  vertices => [ $self->_dbh->selectall_array(q{ SELECT * FROM m_vertex_property }) ],
+  vertices => [ $self->_dbh->selectall_array(q{ SELECT * FROM vertex_property }) ],
 };
 
 =cut
 
   for ($self->g->g->vertices) {
     warn $_ unless defined $t1->{$_}{vertex};
-    $self->g->g->set_vertex_attribute($_, 'epsilon_group',
+    $self->g->vp_epsilon_group($_,
       $json->encode([ split/\+/, $t1->{$_}{vertex}])
     );
   }
@@ -520,9 +505,8 @@ warn Dump {
 
   while (@stacks) {
     my $current = shift @stacks;
-    $self->g->g->set_vertex_attribute($_,
-      'topo', 2 + $#stacks)
-        for @$current
+    $self->g->vp_topo($_, 2 + $#stacks)
+      for @$current
   }
 
 }
@@ -644,9 +628,8 @@ sub _create_grammar_input_cross_product {
         edge e
       WHERE
         e.src IN (SELECT vertex
-                  FROM vertex_attribute
-                  WHERE attribute_name = 'type'
-                    AND attribute_value NOT IN ('Input'))
+                  FROM vertex_property
+                  WHERE type NOT IN ('Input'))
     )
 
     SELECT * FROM terminal_edges
@@ -677,15 +660,15 @@ sub _update_shadowed {
       result
     SET
       src_vertex = (SELECT shadows
-                    FROM m_vertex_property
+                    FROM vertex_property
                     WHERE result.src_vertex
-                      = m_vertex_property.vertex)
+                      = vertex_property.vertex)
     WHERE
       EXISTS (SELECT 1
-              FROM m_vertex_property
+              FROM vertex_property
               WHERE
                 result.src_vertex
-                  = m_vertex_property.vertex
+                  = vertex_property.vertex
                   AND shadows IS NOT NULL)
   });
 
@@ -694,15 +677,15 @@ sub _update_shadowed {
       result
     SET
       dst_vertex = (SELECT shadows
-                    FROM m_vertex_property
+                    FROM vertex_property
                     WHERE result.dst_vertex
-                      = m_vertex_property.vertex)
+                      = vertex_property.vertex)
     WHERE
       EXISTS (SELECT 1
-              FROM m_vertex_property
+              FROM vertex_property
               WHERE
                 result.dst_vertex
-                  = m_vertex_property.vertex
+                  = vertex_property.vertex
                   AND shadows IS NOT NULL)
   });
 
@@ -723,7 +706,7 @@ adjunct(vertex, adjunct) AS (
     vertex,
     scc.value
   FROM
-    m_vertex_property vp
+    vertex_property vp
       INNER JOIN json_each(vp.epsilon_group) scc
 )
 SELECT DISTINCT
@@ -733,9 +716,9 @@ SELECT DISTINCT
   dst_each.adjunct AS dst_vertex
 FROM
   testparser_all_edges ta
-    INNER JOIN m_vertex_property src_p
+    INNER JOIN vertex_property src_p
       ON (src_p.vertex = ta.src_vertex)
-    INNER JOIN m_vertex_property dst_p
+    INNER JOIN vertex_property dst_p
       ON (dst_p.vertex = ta.dst_vertex)
     INNER JOIN adjunct src_each
       ON (src_each.vertex = src_p.vertex)
@@ -904,7 +887,7 @@ sub _create_collapsed_to_stack_vertices {
         INNER JOIN planar right_
           ON (left_.dst_vertex = right_.src_vertex
             AND left_.dst_pos = right_.src_pos)
-        INNER JOIN m_vertex_property mid_p
+        INNER JOIN vertex_property mid_p
           ON (mid_p.vertex = left_.dst_vertex)
     WHERE
       mid_p.is_stack IS NULL
@@ -913,11 +896,11 @@ sub _create_collapsed_to_stack_vertices {
     p.*
   FROM
     planar p
-      INNER JOIN m_vertex_property src_p
+      INNER JOIN vertex_property src_p
         ON (src_p.vertex = p.src_vertex)
-      INNER JOIN m_vertex_property dst_p
+      INNER JOIN vertex_property dst_p
         ON (dst_p.vertex = p.dst_vertex)
-      LEFT JOIN m_vertex_property mid_src_p
+      LEFT JOIN vertex_property mid_src_p
         ON (mid_src_p.vertex = p.mid_src_vertex)
   WHERE
     1 = 1
@@ -963,13 +946,13 @@ sub _create_trees_bottom_up {
             ON (middle_.dst_pos = right_.src_pos
               AND middle_.dst_vertex = right_.src_vertex)
 
-          INNER JOIN m_vertex_property src_p
+          INNER JOIN vertex_property src_p
             ON (src_p.vertex = left_.src_vertex)
-          INNER JOIN m_vertex_property mid1_p
+          INNER JOIN vertex_property mid1_p
             ON (mid1_p.vertex = left_.dst_vertex)
-          INNER JOIN m_vertex_property mid2_p
+          INNER JOIN vertex_property mid2_p
             ON (mid2_p.vertex = right_.src_vertex)
-          INNER JOIN m_vertex_property dst_p
+          INNER JOIN vertex_property dst_p
             ON (dst_p.vertex = right_.dst_vertex)
 
           LEFT JOIN t if1fi
@@ -990,7 +973,7 @@ sub _create_trees_bottom_up {
             ON (pog.dst_pos = left_.src_pos
               AND pog.dst_vertex = left_.src_vertex)
 
-          LEFT JOIN m_vertex_property pog_p
+          LEFT JOIN vertex_property pog_p
             ON (pog_p.vertex = pog.src_vertex
               AND pog_p.is_push)
 
@@ -1094,7 +1077,7 @@ sub _create_trees_bottom_up {
           MIN(dst_pos - src_pos) AS min_distance
         FROM
           t
-            INNER JOIN m_vertex_property src_p
+            INNER JOIN vertex_property src_p
               ON (src_p.vertex = t.src_vertex)
         WHERE
           src_p.type IN ("If", "If1", "If2")
@@ -1212,14 +1195,14 @@ sub _create_view_parent_child_signature {
       view_top_down_reachable v_pc
         INNER JOIN t parent_child
           ON (parent_child.rowid = v_pc.id)
-        INNER JOIN m_vertex_property src_p
+        INNER JOIN vertex_property src_p
           ON (src_p.vertex = parent_child.src_vertex)
-        INNER JOIN m_vertex_property mid1_p
+        INNER JOIN vertex_property mid1_p
           ON (mid1_p.vertex = parent_child.mid_src_vertex
             AND mid1_p.is_push)
-        INNER JOIN m_vertex_property mid2_p
+        INNER JOIN vertex_property mid2_p
           ON (mid2_p.vertex = parent_child.mid_dst_vertex)
-        INNER JOIN m_vertex_property dst_p
+        INNER JOIN vertex_property dst_p
           ON (dst_p.vertex = parent_child.dst_vertex)
 
     UNION
@@ -1243,9 +1226,9 @@ sub _create_view_parent_child_signature {
       view_top_down_reachable v_pc
         INNER JOIN t 
           ON (t.rowid = v_pc.id)
-        INNER JOIN m_vertex_property src_p
+        INNER JOIN vertex_property src_p
           ON (src_p.vertex = t.src_vertex)
-        INNER JOIN m_vertex_property dst_p
+        INNER JOIN vertex_property dst_p
           ON (dst_p.vertex = t.dst_vertex)
     WHERE
       t.mid_dst_pos IS NULL
@@ -1283,10 +1266,10 @@ sub _create_view_sibling_signature {
       view_top_down_reachable v_pc
         INNER JOIN t sibling
           ON (sibling.rowid = v_pc.id)
-        INNER JOIN m_vertex_property mid1_p
+        INNER JOIN vertex_property mid1_p
           ON (mid1_p.vertex = sibling.mid_src_vertex
             AND mid1_p.is_pop)
-        INNER JOIN m_vertex_property mid2_p
+        INNER JOIN vertex_property mid2_p
           ON (mid2_p.vertex = sibling.mid_dst_vertex)
 
     ORDER BY
@@ -1353,18 +1336,18 @@ sub _create_vertex_property_table {
   my ($self) = @_;
 
   $self->_dbh->do(q{
-    DROP TABLE IF EXISTS m_vertex_property
+    DROP TABLE IF EXISTS vertex_property
   });
 
   $self->_dbh->do(q{
-    CREATE TABLE m_vertex_property AS
+    CREATE TABLE vertex_property AS
     SELECT * FROM view_vertex_property
   });
 
   $self->_dbh->do(q{
     CREATE UNIQUE INDEX
       idx_vertex_property_vertex
-    ON m_vertex_property(vertex)
+    ON vertex_property(vertex)
   });
 
 }
@@ -1383,7 +1366,7 @@ sub _replace_conditionals {
 #  $p->_create_view_parent_child;
 
   my @parent_child_edges = $p->_dbh->selectall_array(q{
-    SELECT parent, child FROM m_parent_child
+    SELECT parent, child FROM view_parent_child
   });
 
   my $gx = Graph::Directed->new(
@@ -1486,6 +1469,8 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
 sub _rematerialise_all_views {
   my ($self) = @_;
 
+  return;
+
   my $dbh = $self->_dbh;
 
   my @views = $dbh->selectall_array(q{
@@ -1532,6 +1517,8 @@ sub _rematerialise_all_views {
 #  use Data::Dumper;
 #  warn Dumper [ @order ];
 
+  @order = ('view_vertex_property');
+
   for my $view_name (reverse @order) {
     my $table_name = $view_name =~ s/^view_//ir;
 
@@ -1574,13 +1561,13 @@ __END__
           COALESCE(mid1_p.is_pop, 0) AS is_group
         FROM 
           t
-            INNER JOIN m_vertex_property src_p
+            INNER JOIN vertex_property src_p
               ON (src_p.vertex = t.src_vertex)
-            LEFT JOIN m_vertex_property mid1_p
+            LEFT JOIN vertex_property mid1_p
               ON (mid1_p.vertex = t.mid_src_vertex)
-            LEFT JOIN m_vertex_property mid2_p
+            LEFT JOIN vertex_property mid2_p
               ON (mid2_p.vertex = t.mid_dst_vertex)
-            INNER JOIN m_vertex_property dst_p
+            INNER JOIN vertex_property dst_p
               ON (dst_p.vertex = t.dst_vertex)
       )
 */

@@ -22,13 +22,16 @@ sub gp_final_vertex { _rw_graph_attribute('final_vertex', @_) }
 #
 #####################################################################
 
-sub vp_type     { _rw_vertex_attribute('type',     @_) // '' }
-sub vp_name     { _rw_vertex_attribute('name',     @_) }
-sub vp_p1       { _rw_vertex_attribute('p1',       @_) }
-sub vp_p2       { _rw_vertex_attribute('p2',       @_) }
-sub vp_partner  { _rw_vertex_attribute('partner',  @_) }
-sub vp_run_list { _rw_vertex_attribute('run_list', @_) }
-sub vp_shadows  { _rw_vertex_attribute('shadows',  @_) }
+sub vp_type          { _rw_vertex_attribute('type',    @_) // '' }
+sub vp_name          { _rw_vertex_attribute('name',          @_) }
+sub vp_p1            { _rw_vertex_attribute('p1',            @_) }
+sub vp_p2            { _rw_vertex_attribute('p2',            @_) }
+sub vp_partner       { _rw_vertex_attribute('partner',       @_) }
+sub vp_run_list      { _rw_vertex_attribute('run_list',      @_) }
+sub vp_shadows       { _rw_vertex_attribute('shadows',       @_) }
+sub vp_self_loop     { _rw_vertex_attribute('self_loop',     @_) }
+sub vp_topo          { _rw_vertex_attribute('topo',          @_) }
+sub vp_epsilon_group { _rw_vertex_attribute('epsilon_group', @_) }
 
 #####################################################################
 #
@@ -78,13 +81,59 @@ sub conditionals_from_if {
 #
 #####################################################################
 
-sub _rw_vertex_attribute {
+sub _rw_vertex_attribute_old {
   my ($name, $self, $vertex, $value) = @_;
 
   my $old = $self->g->get_vertex_attribute($vertex, $name);
 
   if (@_ > 3) {
     $self->g->set_vertex_attribute($vertex, $name, $value);
+  }
+
+  return $old;
+}
+
+sub _rw_vertex_attribute {
+  my ($name, $self, $vertex, $value) = @_;
+
+  my ($old) = $self->g->{dbh}->selectrow_array(sprintf(q{
+    SELECT %s FROM vertex_property WHERE vertex = ?
+  }, $name), {}, $vertex);
+
+  if (@_ > 3) {
+
+    # TODO: this could be nicer
+
+    $self->g->{dbh}->do(sprintf(q{
+      INSERT OR IGNORE INTO vertex_property(vertex) VALUES(%s)
+    }, $self->g->{dbh}->quote($vertex)));
+
+    $self->g->{dbh}->do(sprintf(q{
+      UPDATE vertex_property SET %s = %s WHERE vertex = %s
+    }, $name, $self->g->{dbh}->quote($value),
+              $self->g->{dbh}->quote($vertex)));
+
+    if ($name eq 'type' and $value =~ /^(Start|If|If1|If2)$/) {
+      $self->g->{dbh}->do(sprintf(q{
+        UPDATE vertex_property
+        SET is_stack = 1, is_push = 1, is_pop = NULL
+        WHERE vertex = %s
+      }, $self->g->{dbh}->quote($vertex)));
+
+    } elsif ($name eq 'type' and $value =~ /^(Final|Fi|Fi1|Fi2)$/) {
+      $self->g->{dbh}->do(sprintf(q{
+        UPDATE vertex_property
+        SET is_stack = 1, is_push = NULL, is_pop = 1
+        WHERE vertex = %s
+      }, $self->g->{dbh}->quote($vertex)));
+    } elsif ($name eq 'type') {
+      $self->g->{dbh}->do(sprintf(q{
+        UPDATE vertex_property
+        SET is_stack = NULL, is_pop = NULL, is_pop = NULL
+        WHERE vertex = %s
+      }, $self->g->{dbh}->quote($vertex)));
+    }
+
   }
 
   return $old;
@@ -126,6 +175,25 @@ sub from_grammar_graph {
   );
 
   my $dbh = $g->{dbh};
+
+  $dbh->do(q{
+    CREATE TABLE vertex_property (
+      vertex PRIMARY KEY,
+      type,
+      name,
+      p1,
+      p2,
+      partner,
+      is_stack,
+      is_push,
+      is_pop,
+      run_list,
+      shadows,
+      self_loop DEFAULT 'no',
+      topo,
+      epsilon_group
+    )
+  });
 
   my $self = $class->new(
     g => $g,

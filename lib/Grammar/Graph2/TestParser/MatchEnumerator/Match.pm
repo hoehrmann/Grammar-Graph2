@@ -43,9 +43,9 @@ sub _build_tree {
       t.*
     FROM
       t
-        INNER JOIN m_vertex_property src_p
+        INNER JOIN vertex_property src_p
           ON (src_p.vertex = t.src_vertex)
-        LEFT JOIN m_vertex_property mid_src_p
+        LEFT JOIN vertex_property mid_src_p
           ON (mid_src_p.vertex = t.mid_src_vertex)
     WHERE
       t.rowid = ?
