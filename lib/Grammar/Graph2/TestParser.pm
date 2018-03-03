@@ -507,6 +507,73 @@ sub _file_to_table {
   $self->_input_length( scalar @ords );
 }
 
+sub _create_grammar_input_cross_product_idea {
+  my ($self) = @_;
+
+  $self->_dbh->do(q{
+    DROP TABLE IF EXISTS testparser_all_edges
+  });
+
+  $self->_dbh->do(q{
+    CREATE TABLE testparser_all_edges AS
+
+    WITH RECURSIVE
+    foo(src_pos, src_vertex, dst_pos, dst_vertex) AS (
+      SELECT 
+        (SELECT 0 + MIN(rowid) FROM testparser_input) AS src_pos,
+        e.src,
+        (SELECT 0 + MIN(rowid) FROM testparser_input) AS dst_pos,
+        e.dst AS dst_vertex
+      FROM
+        Edge e
+      WHERE
+        e.src = (SELECT attribute_value
+                 FROM graph_attribute
+                 WHERE attribute_name = 'start_vertex')
+      UNION
+      SELECT
+        foo.dst_pos AS src_pos,
+--        foo.dst_vertex AS src_vertex,
+        each.value AS src_vertex,
+        CASE WHEN src_p.type <> 'Input' THEN dst_pos ELSE dst_pos + 1 END AS dst_pos,
+        e.dst AS dst_vertex
+      FROM
+        Edge e
+          INNER JOIN foo
+            ON (e.src = foo.dst_vertex)
+          INNER JOIN vertex_property src_p
+            ON (e.src = src_p.vertex)
+          INNER JOIN
+            json_each(src_p.epsilon_group) each
+          INNER JOIN (SELECT * FROM testparser_input
+                      UNION ALL
+                      SELECT
+                        COALESCE(MAX(pos), 0) + 1 AS pos,
+                        -1 AS ord
+                      FROM
+                        testparser_input) i
+            ON (i.pos = foo.dst_pos)
+          LEFT JOIN vertex_span s
+            ON (i.ord >= s.min AND i.ord <= s.max)
+      WHERE
+        src_p.type <> 'Input' OR s.vertex = e.src
+    )
+    SELECT * FROM foo ORDER BY src_pos, src_vertex, dst_pos, dst_vertex
+  });
+
+  $self->_dbh->do(q{
+    CREATE UNIQUE INDEX
+      idx_uniq_testparser_all_edges
+    ON testparser_all_edges(
+      src_pos,
+      src_vertex,
+      dst_pos,
+      dst_vertex
+    )
+  });
+
+}
+
 sub _create_grammar_input_cross_product {
   my ($self) = @_;
 
@@ -1128,7 +1195,7 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
     edges => [ graph_edges_between($g2->g, $if, $fi) ],
   );
 
-  return if grep {
+  do { warn "FIXME: hmm if in if?" if 0; return } if grep {
     $g2->is_if_vertex($_) and $_ ne $if
   } $subgraph->vertices;
 
@@ -1141,8 +1208,13 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
   my $op = $g2->vp_name($if);
 
   # TODO: ...
-  my $if1_regular = 0;
-  my $if2_regular = 0;
+  my $if1_regular = not grep {
+    $g2->vp_self_loop($_) eq 'irregular'
+  } graph_vertices_between($subgraph, $if1, $fi1);
+
+  my $if2_regular = not grep {
+    $g2->vp_self_loop($_) eq 'irregular'
+  } graph_vertices_between($subgraph, $if2, $fi2);
 
   my @accepting = $d->cleanup_dead_states(sub {
     my %set = map { $_ => 1 } @_;
@@ -1161,6 +1233,7 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
 
     if ($op eq '#exclusion') {
       if ($if2_regular) {
+#        warn;
         return not $set{$fi2};
       }
     }
@@ -1169,6 +1242,7 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
   });
 
   if ($op eq '#ordered_choice' and $if1_regular) {
+#    warn;
     my $sth = $d->_dbh->prepare(q{
       DELETE FROM Configuration
       WHERE vertex = ?
