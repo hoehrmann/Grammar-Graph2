@@ -15,6 +15,10 @@ use Grammar::Graph2::Automata;
 use List::OrderBy;
 use List::StackBy;
 
+# mixin
+
+use Grammar::Graph2::TestParser::Topology;
+
 has 'input_path' => (
   is       => 'ro',
   required => 1,
@@ -60,55 +64,6 @@ sub BUILD {
     DROP VIEW IF EXISTS view_parent_child_signature;
     DROP VIEW IF EXISTS view_sibling_signature;
 
-    -----------------------------------------------------------------
-    -- view_vertex_property
-    -----------------------------------------------------------------
-    DROP VIEW IF EXISTS view_vertex_property;
-    CREATE VIEW view_vertex_property AS SELECT * FROM vertex_property;
-/*
-    DROP VIEW IF EXISTS view_vertex_property;
-    CREATE VIEW view_vertex_property AS
-    WITH av AS (
-      SELECT
-        vertex,
-        attribute_name AS an,
-        attribute_value AS av
-      FROM
-        vertex_attribute
-    )
-    SELECT 
-      vertex AS vertex,
-      MAX(CASE WHEN an = 'type' THEN av END)    AS type,
-      MAX(CASE WHEN an = 'name' THEN av END)    AS name,
-      MAX(CASE WHEN an = 'p1' THEN av END)      AS p1,
-      MAX(CASE WHEN an = 'p2' THEN av END)      AS p2,
-      MAX(CASE WHEN an = 'partner' THEN av END) AS partner,
---      MAX(CASE WHEN an = 'input' THEN av END)   AS input,
-      MAX(CASE WHEN an = 'shadows' THEN av END)   AS shadows,
-      MAX(
-        CASE WHEN an = 'type' AND av IN ('Start',
-          'Final', 'If', 'If1', 'If2', 'Fi', 'Fi1', 'Fi2') THEN 1 END
-      ) AS is_stack,
-      MAX(
-        CASE WHEN an = 'type' AND av IN ('Start',
-          'If', 'If1', 'If2') THEN 1 END
-      ) AS is_push,
-      MAX(
-        CASE WHEN an = 'type' AND av IN ('Final',
-          'Fi', 'Fi1', 'Fi2') THEN 1 END
-      ) AS is_pop,
-      MAX(CASE WHEN an = 'self_loop' THEN av END)   AS self_loop,
-      MAX(CASE WHEN an = 'topo' THEN av END)   AS topo,
-      MAX(CASE WHEN an = 'epsilon_group' THEN av END)   AS epsilon_group
-          
-    FROM
-      av
-    GROUP BY
-      vertex
-    ORDER BY
-      vertex
-    ;
-*/
     -----------------------------------------------------------------
     -- view_parent_child
     -----------------------------------------------------------------
@@ -309,207 +264,173 @@ sub BUILD {
 
   });
 
+  # Testparser VIEWs
+  $self->_dbh->do(q{
+    -----------------------------------------------------------------
+    -- view_sibling_signature
+    -----------------------------------------------------------------
+
+    DROP VIEW IF EXISTS view_sibling_signature;
+    CREATE VIEW view_sibling_signature AS 
+    SELECT DISTINCT
+      v_pc.id                   AS id,
+
+      sibling.mid_src_pos       AS lhs_final_pos,
+      mid1_p.name               AS lhs_final_name,
+      sibling.mid_dst_pos       AS rhs_start_pos,
+      mid2_p.name               AS rhs_start_name
+
+    FROM
+      view_top_down_reachable v_pc
+        INNER JOIN t sibling
+          ON (sibling.rowid = v_pc.id)
+        INNER JOIN vertex_property mid1_p
+          ON (mid1_p.vertex = sibling.mid_src_vertex
+            AND mid1_p.is_pop)
+        INNER JOIN vertex_property mid2_p
+          ON (mid2_p.vertex = sibling.mid_dst_vertex)
+
+    ORDER BY
+      lhs_final_pos ASC,
+      lhs_final_name,
+      rhs_start_pos DESC,
+      rhs_start_name
+    ;
+
+    -----------------------------------------------------------------
+    -- view_parent_child_signature
+    -----------------------------------------------------------------
+
+    DROP VIEW IF EXISTS view_parent_child_signature;
+    CREATE VIEW view_parent_child_signature AS 
+    SELECT DISTINCT
+      v_pc.id                   AS id,
+
+      parent_child.src_pos      AS parent_start_pos,
+      src_p.name                AS parent_start_name,
+      parent_child.mid_src_pos  AS first_child_pos,
+      mid1_p.name               AS first_child_name,
+
+      parent_child.mid_dst_pos  AS last_child_pos,
+      mid2_p.name               AS last_child_name,
+      parent_child.dst_pos      AS parent_final_pos,
+      dst_p.name                AS parent_final_name
+
+    FROM
+      view_top_down_reachable v_pc
+        INNER JOIN t parent_child
+          ON (parent_child.rowid = v_pc.id)
+        INNER JOIN vertex_property src_p
+          ON (src_p.vertex = parent_child.src_vertex)
+        INNER JOIN vertex_property mid1_p
+          ON (mid1_p.vertex = parent_child.mid_src_vertex
+            AND mid1_p.is_push)
+        INNER JOIN vertex_property mid2_p
+          ON (mid2_p.vertex = parent_child.mid_dst_vertex)
+        INNER JOIN vertex_property dst_p
+          ON (dst_p.vertex = parent_child.dst_vertex)
+
+    UNION
+
+    -- TODO(bh): this can probably be merged with the part above
+
+    SELECT
+      t.rowid                   AS id,
+
+      t.src_pos                 AS parent_start_pos,
+      src_p.name                AS parent_start_name,
+      NULL                      AS first_child_pos,
+      NULL                      AS first_child_name,
+
+      NULL                      AS last_child_pos,
+      NULL                      AS last_child_name,
+      t.dst_pos                 AS parent_final_pos,
+      dst_p.name                AS parent_final_name
+    FROM
+      -- TODO used to be t
+      view_top_down_reachable v_pc
+        INNER JOIN t 
+          ON (t.rowid = v_pc.id)
+        INNER JOIN vertex_property src_p
+          ON (src_p.vertex = t.src_vertex)
+        INNER JOIN vertex_property dst_p
+          ON (dst_p.vertex = t.dst_vertex)
+    WHERE
+      t.mid_dst_pos IS NULL
+      AND src_p.partner = dst_p.vertex
+
+    ORDER BY
+      parent_start_pos ASC,
+      parent_final_pos DESC,
+      first_child_pos ASC,
+      last_child_pos DESC,
+      parent_start_name,
+      first_child_name,
+      last_child_name
+    ;
+
+    -----------------------------------------------------------------
+    -- view_top_down_reachable
+    -----------------------------------------------------------------
+
+    DROP VIEW IF EXISTS view_top_down_reachable;
+    CREATE VIEW view_top_down_reachable AS
+    WITH RECURSIVE top_down_reachable(id) AS (
+      SELECT
+        t.rowid AS id
+      FROM
+        t
+      WHERE
+        src_pos = (SELECT MIN(rowid) FROM testparser_input)
+        AND dst_pos = (SELECT 1 + MAX(rowid) FROM testparser_input)
+        AND src_vertex = (SELECT attribute_value
+                          FROM graph_attribute
+                          WHERE attribute_name = 'start_vertex')
+        AND dst_vertex = (SELECT attribute_value
+                          FROM graph_attribute
+                          WHERE attribute_name = 'final_vertex')
+
+      UNION
+
+      SELECT
+        t.rowid AS id
+      FROM
+        top_down_reachable
+          INNER JOIN t p
+            ON (p.rowid = top_down_reachable.id)
+          INNER JOIN t 
+            ON ((1=1 -- lhs
+                AND p.src_pos = t.src_pos
+                AND p.src_vertex = t.src_vertex
+                AND p.mid_src_pos = t.dst_pos
+                AND p.mid_src_vertex = t.dst_vertex)
+              OR (1=1 -- rhs
+                AND p.mid_dst_pos = t.src_pos
+                AND p.mid_dst_vertex = t.src_vertex
+                AND p.dst_pos = t.dst_pos
+                AND p.dst_vertex = t.dst_vertex)
+              OR (1=1 -- child
+                AND p.mid_src_pos = t.src_pos
+                AND p.mid_src_vertex = t.src_vertex
+                AND p.mid_dst_pos = t.dst_pos
+                AND p.mid_dst_vertex = t.dst_vertex))
+    )
+    SELECT
+      *
+    FROM
+      top_down_reachable
+    ;
+  });
+
   $self->_add_self_loop_attributes();
   $self->_replace_conditionals();
   $self->_add_topological_attributes();
   
-  $self->_create_view_top_down_reachable();
-  $self->_create_view_parent_child_signature();
-  $self->_create_view_sibling_signature();
   $self->_create_vertex_spans();
 
   $self->_dbh->do(q{ ANALYZE });
 }
 
-sub _add_self_loop_attributes {
-  my ($self) = @_;
-
-  my @self_loop = $self->_dbh->selectall_array(q{
-    SELECT vertex, self_loop
-    FROM view_self_loop
-  });
-
-  $self->g->vp_self_loop(@$_)
-    for @self_loop;
-}
-
-sub _scg_topological_depth {
-  my ($d) = @_;
-
-  my $scg = $d->strongly_connected_graph;
-  my $scgf = Graph::Feather->new(
-    vertices => [ $scg->vertices ],
-    edges => [ $scg->edges ],
-  );
-
-  my $result = $scgf->{dbh}->selectall_hashref(q{
-    WITH RECURSIVE
-    roots(vertex) AS (
-      SELECT DISTINCT
-        v.vertex_name AS vertex
-      FROM
-        vertex v
-          LEFT JOIN Edge successors
-            ON (successors.src = v.vertex_name)
-          LEFT JOIN Edge predecessors
-            ON (predecessors.dst = v.vertex_name)
-      WHERE
-        predecessors.src IS NULL
-    ),
-    dfs(vertex, depth) AS (
-      SELECT
-        vertex,
-        0 AS depth
-      FROM roots
-      UNION ALL
-      SELECT
-        e.dst AS vertex,
-        depth + 1 AS depth
-      FROM dfs
-        INNER JOIN Edge e
-          ON (e.src = dfs.vertex)
-    ),
-    topology(vertex, max_depth, min_depth) AS (
-      SELECT vertex, MAX(depth), MIN(depth) FROM dfs
-      GROUP BY vertex
-    )
-    SELECT * FROM topology ORDER BY max_depth DESC
-  }, 'vertex');
-
-  for my $k (keys %$result) {
-    next unless $k =~ /\+/;
-    for my $v (split/\+/, $k) {
-      # FIXME: clone?
-      $result->{$v} = $result->{$k};
-    }
-  }
-
-  return $result;
-}
-
-sub _topo_parent_child {
-  my ($self) = @_;
-
-  my $d = Graph::Directed->new;
-
-  $d->add_vertices(
-    map { @$_ } $self->_dbh->selectall_array(q{
-      SELECT
-        src_p.vertex
-      FROM
-        vertex_property src_p
-    })
-  );
-
-  $d->add_edges(
-    $self->_dbh->selectall_array(q{
-      SELECT
-        pc.parent AS parent,
-        pc.child AS child
-      FROM
-        view_parent_child pc
-          INNER JOIN vertex_property parent_p
-            ON (pc.parent = parent_p.vertex)
-          INNER JOIN vertex_property child_p
-            ON (pc.child = child_p.vertex)
-
-    })
-  );
-
-  return _scg_topological_depth($d);
-}
-
-sub _topo_epsilon {
-  my ($self) = @_;
-
-  my $d = Graph::Directed->new;
-
-  $d->add_vertices(
-    map { @$_ } $self->_dbh->selectall_array(q{
-      SELECT
-        src_p.vertex
-      FROM
-        vertex_property src_p
-    })
-  );
-
-  $d->add_edges(
-    $self->_dbh->selectall_array(q{
-      SELECT
-        src,
-        dst
-      FROM
-        Edge
-          INNER JOIN vertex_property src_p
-            ON (src_p.vertex = Edge.src)
-      WHERE
-        src_p.type <> 'Input'
-    })
-  );
-
-  my $scg = $d->strongly_connected_graph;
-  my $scgf = Graph::Feather->new(
-    vertices => [ $scg->vertices ],
-    edges => [ $scg->edges ],
-  );
-
-  return _scg_topological_depth($d)
-}
-
-sub _add_topological_attributes {
-  my ($self) = @_;
-
-  my $json = JSON->new
-    ->canonical(1)
-    ->ascii(1)
-    ->indent(0);
-
-  my $t1 = $self->_topo_epsilon();
-  my $t2 = $self->_topo_parent_child();
-
-=pod
-
-
-use YAML::XS;
-warn Dump {
-  t1 => $t1,
-  t2 => $t2,
-  vertices => [ $self->_dbh->selectall_array(q{ SELECT * FROM vertex_property }) ],
-};
-
-=cut
-
-  for ($self->g->g->vertices) {
-    warn $_ unless defined $t1->{$_}{vertex};
-    $self->g->vp_epsilon_group($_,
-      $json->encode([ split/\+/, $t1->{$_}{vertex}])
-    );
-  }
-
-  my @order = order_by_desc {
-    $t1->{$_}{max_depth} // warn
-  } then_by_desc {
-    $t2->{$_}{max_depth} // warn
-  } then_by_desc {
-    $t1->{$_}{min_depth} // warn
-  } then_by_desc {
-    $t2->{$_}{min_depth} // warn
-  } $self->g->g->vertices();
-
-  my @stacks = stack_by {
-    join ',', $t1->{$_}{max_depth},
-              $t1->{$_}{min_depth},
-              $t2->{$_}{max_depth},
-              $t2->{$_}{min_depth}
-  } @order;
-
-  while (@stacks) {
-    my $current = shift @stacks;
-    $self->g->vp_topo($_, 2 + $#stacks)
-      for @$current
-  }
-
-}
 
 # TODO: rename to compute_t or whatever
 sub create_t {
@@ -1112,174 +1033,6 @@ sub _create_trees_bottom_up {
 # ...
 #####################################################################
 
-sub _create_view_top_down_reachable {
-  my ($self) = @_;
-
-  $self->_dbh->do(q{
-    DROP VIEW IF EXISTS view_top_down_reachable
-  });
-
-  $self->_dbh->do(q{
-    CREATE VIEW view_top_down_reachable AS
-    WITH RECURSIVE top_down_reachable(id) AS (
-      SELECT
-        t.rowid AS id
-      FROM
-        t
-      WHERE
-        src_pos = (SELECT MIN(rowid) FROM testparser_input)
-        AND dst_pos = (SELECT 1 + MAX(rowid) FROM testparser_input)
-        AND src_vertex = (SELECT attribute_value
-                          FROM graph_attribute
-                          WHERE attribute_name = 'start_vertex')
-        AND dst_vertex = (SELECT attribute_value
-                          FROM graph_attribute
-                          WHERE attribute_name = 'final_vertex')
-
-      UNION
-
-      SELECT
-        t.rowid AS id
-      FROM
-        top_down_reachable
-          INNER JOIN t p
-            ON (p.rowid = top_down_reachable.id)
-          INNER JOIN t 
-            ON ((1=1 -- lhs
-                AND p.src_pos = t.src_pos
-                AND p.src_vertex = t.src_vertex
-                AND p.mid_src_pos = t.dst_pos
-                AND p.mid_src_vertex = t.dst_vertex)
-              OR (1=1 -- rhs
-                AND p.mid_dst_pos = t.src_pos
-                AND p.mid_dst_vertex = t.src_vertex
-                AND p.dst_pos = t.dst_pos
-                AND p.dst_vertex = t.dst_vertex)
-              OR (1=1 -- child
-                AND p.mid_src_pos = t.src_pos
-                AND p.mid_src_vertex = t.src_vertex
-                AND p.mid_dst_pos = t.dst_pos
-                AND p.mid_dst_vertex = t.dst_vertex))
-    )
-    SELECT
-      *
-    FROM
-      top_down_reachable
-  
-  });
-}
-
-sub _create_view_parent_child_signature {
-  my ($self) = @_;
-
-  $self->_dbh->do(q{
-    DROP VIEW IF EXISTS view_parent_child_signature
-  });
-
-  $self->_dbh->do(q{
-    CREATE VIEW view_parent_child_signature AS 
-    SELECT DISTINCT
-      v_pc.id                   AS id,
-
-      parent_child.src_pos      AS parent_start_pos,
-      src_p.name                AS parent_start_name,
-      parent_child.mid_src_pos  AS first_child_pos,
-      mid1_p.name               AS first_child_name,
-
-      parent_child.mid_dst_pos  AS last_child_pos,
-      mid2_p.name               AS last_child_name,
-      parent_child.dst_pos      AS parent_final_pos,
-      dst_p.name                AS parent_final_name
-
-    FROM
-      view_top_down_reachable v_pc
-        INNER JOIN t parent_child
-          ON (parent_child.rowid = v_pc.id)
-        INNER JOIN vertex_property src_p
-          ON (src_p.vertex = parent_child.src_vertex)
-        INNER JOIN vertex_property mid1_p
-          ON (mid1_p.vertex = parent_child.mid_src_vertex
-            AND mid1_p.is_push)
-        INNER JOIN vertex_property mid2_p
-          ON (mid2_p.vertex = parent_child.mid_dst_vertex)
-        INNER JOIN vertex_property dst_p
-          ON (dst_p.vertex = parent_child.dst_vertex)
-
-    UNION
-
-    -- TODO(bh): this can probably be merged with the part above
-
-    SELECT
-      t.rowid                   AS id,
-
-      t.src_pos                 AS parent_start_pos,
-      src_p.name                AS parent_start_name,
-      NULL                      AS first_child_pos,
-      NULL                      AS first_child_name,
-
-      NULL                      AS last_child_pos,
-      NULL                      AS last_child_name,
-      t.dst_pos                 AS parent_final_pos,
-      dst_p.name                AS parent_final_name
-    FROM
-      -- TODO used to be t
-      view_top_down_reachable v_pc
-        INNER JOIN t 
-          ON (t.rowid = v_pc.id)
-        INNER JOIN vertex_property src_p
-          ON (src_p.vertex = t.src_vertex)
-        INNER JOIN vertex_property dst_p
-          ON (dst_p.vertex = t.dst_vertex)
-    WHERE
-      t.mid_dst_pos IS NULL
-      AND src_p.partner = dst_p.vertex
-
-    ORDER BY
-      parent_start_pos ASC,
-      parent_final_pos DESC,
-      first_child_pos ASC,
-      last_child_pos DESC,
-      parent_start_name,
-      first_child_name,
-      last_child_name
-  });
-}
-
-sub _create_view_sibling_signature {
-  my ($self) = @_;
-
-  $self->_dbh->do(q{
-    DROP VIEW IF EXISTS view_sibling_signature
-  });
-
-  $self->_dbh->do(q{
-    CREATE VIEW view_sibling_signature AS 
-    SELECT DISTINCT
-      v_pc.id                   AS id,
-
-      sibling.mid_src_pos       AS lhs_final_pos,
-      mid1_p.name               AS lhs_final_name,
-      sibling.mid_dst_pos       AS rhs_start_pos,
-      mid2_p.name               AS rhs_start_name
-
-    FROM
-      view_top_down_reachable v_pc
-        INNER JOIN t sibling
-          ON (sibling.rowid = v_pc.id)
-        INNER JOIN vertex_property mid1_p
-          ON (mid1_p.vertex = sibling.mid_src_vertex
-            AND mid1_p.is_pop)
-        INNER JOIN vertex_property mid2_p
-          ON (mid2_p.vertex = sibling.mid_dst_vertex)
-
-    ORDER BY
-      lhs_final_pos ASC,
-      lhs_final_name,
-      rhs_start_pos DESC,
-      rhs_start_name
-  });
-}
-
 #####################################################################
 # This stuff does not really belong here:
 #####################################################################
@@ -1332,26 +1085,6 @@ sub _create_vertex_spans {
 
 }
 
-sub _create_vertex_property_table {
-  my ($self) = @_;
-
-  $self->_dbh->do(q{
-    DROP TABLE IF EXISTS vertex_property
-  });
-
-  $self->_dbh->do(q{
-    CREATE TABLE vertex_property AS
-    SELECT * FROM view_vertex_property
-  });
-
-  $self->_dbh->do(q{
-    CREATE UNIQUE INDEX
-      idx_vertex_property_vertex
-    ON vertex_property(vertex)
-  });
-
-}
-
 #####################################################################
 # This stuff does not really belong here, and not with the other part
 #####################################################################
@@ -1361,9 +1094,6 @@ sub _replace_conditionals {
 
   my $p = $self;
   my $g2 = $self->g;
-
-#  $p->_create_vertex_property_table;
-#  $p->_create_view_parent_child;
 
   my @parent_child_edges = $p->_dbh->selectall_array(q{
     SELECT parent, child FROM view_parent_child
@@ -1375,16 +1105,10 @@ sub _replace_conditionals {
 
   my $scg = $gx->strongly_connected_graph;
 
-#  say for $scg->vertices;
-
   for my $scc (reverse $scg->toposort) {
     next unless $g2->is_if_vertex($scc);
     _replace_if_fi_by_unmodified_dfa_vertices($g2, $scc);
   }
-
-#  $p->_create_vertex_spans();
-#  $p->_create_vertex_property_table();
-#  $p->_dbh->sqlite_backup_to_file('MATA-OUT.sqlite');
 
 }
 
@@ -1465,87 +1189,6 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
 #####################################################################
 #
 #####################################################################
-
-sub _rematerialise_all_views {
-  my ($self) = @_;
-
-  return;
-
-  my $dbh = $self->_dbh;
-
-  my @views = $dbh->selectall_array(q{
-    SELECT
-      name, sql
-    FROM
-      sqlite_master
-    WHERE
-      type = 'view'
-  });
-
-  my $ref = Graph::Directed->new;
-
-  for my $view (@views) {
-    $ref->add_vertex($view->[0]);
-    $ref->add_edge($view->[0], "view_$_")
-      for grep { $1 ne $view->[0] }
-        $view->[1] =~ /\bm_(.*?)\b/g
-  }
-
-  $ref->add_edge($_, 'view_vertex_property')
-    for $ref->vertices;
-
-  my @order = $ref
-    ->strongly_connected_graph
-    ->toposort;
-
-  die if grep { /\+/ } $ref->vertices;
-
-  if (0) {
-    eval {
-      $dbh->do(q{
-        DETACH DATABASE m
-      });
-    };
-
-    $dbh->do(q{
-      ATTACH DATABASE ':memory:' AS m
-    });
-  }
-
-#  $dbh->begin_work();
-
-#  use Data::Dumper;
-#  warn Dumper [ @order ];
-
-  @order = ('view_vertex_property');
-
-  for my $view_name (reverse @order) {
-    my $table_name = $view_name =~ s/^view_//ir;
-
-#warn "$table_name";
-
-    $dbh->do(sprintf(q{
-        DROP TABLE IF EXISTS %s
-      }, 
-      $dbh->quote_identifier(undef, 'main', "m_$table_name")
-    ));
-
-    $dbh->do(sprintf(q{
-        CREATE TABLE %s AS SELECT * FROM %s
-      },
-      $dbh->quote_identifier(undef, 'main', "m_$table_name"),
-      $dbh->quote_identifier(undef, 'main', $view_name)
-    ));
-  }
-
-#die;
-
-#  $dbh->commit;
-#  $dbh->sqlite_backup_to_file('LOL.sqlite');
-#  die;
-
-}
-
 
 
 1;
