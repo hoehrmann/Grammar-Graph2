@@ -45,8 +45,9 @@ sub BUILD {
 sub subgraph_automaton {
   my ($self, $subgraph, $start_vertex) = @_;
 
-  my $db_name = 'MATA-DFA.sqlite';
-  unlink $db_name;
+  my $db_name = ':memory:';
+#  my $db_name = 'MATA-DFA.sqlite';
+#  unlink $db_name;
 
   my $d = Algorithm::ConstructDFA2->new(
 
@@ -72,9 +73,11 @@ sub subgraph_automaton {
 
   my $start_id = $d->find_or_create_state_id( $start_vertex );
 
-  while (my $count = $d->compute_some_transitions(1000)) {
+  while (my $count = $d->compute_some_transitions(2**17)) {
     $self->_log->debugf("Computed %u transitions", $count);
   }
+
+  $self->_log->debugf("Done computing transitions");
 
   return ($d, $start_id);
 }
@@ -160,6 +163,8 @@ sub _shadow_subgraph_under_automaton {
 
   my $json = JSON->new->canonical(1)->ascii(1)->indent(0);
 
+  my %cache;
+
   while (my $row = $sth_new_vertices->fetchrow_arrayref) {
     my ($rowid, $src_state, $run_list, $dst_state, $type, $shadow_edges) =
       @$row;
@@ -174,12 +179,13 @@ sub _shadow_subgraph_under_automaton {
 
     my $items = $json->decode( $run_list );
 
-    my @run_lists = map {
+    my @run_lists = uniq(map {
       $self->alphabet->_ord_to_list->{ $_ }
-    } uniq( @$items );
+    } uniq( @$items ));
 
-    my $combined = Set::IntSpan->new;
-    $combined->U( $_ ) for @run_lists;
+    my $encoded = $json->encode(\@run_lists);
+    $cache{ $encoded } //= Set::IntSpan->new(@run_lists);
+    my $combined = $cache{ $encoded };
 
     $self->base_graph->vp_run_list($base_id + $rowid, $combined);
   }

@@ -37,6 +37,7 @@ sub BUILD {
 
   my @spans = 
     map { Set::IntSpan->new($_) }
+    uniq_by { $_ }
     grep { defined }
     map {
       $self->g->vp_run_list($_)
