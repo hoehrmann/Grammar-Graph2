@@ -10,6 +10,7 @@ use File::Spec qw//;
 use List::UtilsBy qw/partition_by sort_by uniq_by/;
 use List::MoreUtils qw/uniq/;
 use Grammar::Graph2::Alphabet;
+use Graph::SomeUtils qw/:all/;
 use Algorithm::ConstructDFA2;
 use Set::IntSpan;
 use YAML::XS;
@@ -45,9 +46,9 @@ sub BUILD {
 sub subgraph_automaton {
   my ($self, $subgraph, $start_vertex) = @_;
 
-  my $db_name = ':memory:';
-#  my $db_name = 'MATA-DFA.sqlite';
-#  unlink $db_name;
+#  my $db_name = ':memory:';
+  my $db_name = 'MATA-DFA.sqlite';
+  unlink $db_name;
 
   my $d = Algorithm::ConstructDFA2->new(
 
@@ -292,6 +293,9 @@ sub _shadow_subgraph_under_automaton {
     $self->base_graph->g->add_edge($base_id + $dfa_rowid,
       $new_final_vertex);
   }
+
+# UNEXPECTED
+$self->base_graph->g->delete_edges( graph_edges_between($self->base_graph->g, $start_vertex, $final_vertex) );
 
   $self->base_graph->g->delete_edges( 
     map {

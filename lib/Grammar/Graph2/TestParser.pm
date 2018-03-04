@@ -425,11 +425,9 @@ sub BUILD {
   });
 
   $self->_add_self_loop_attributes();
-  $self->_replace_conditionals();
   $self->_add_topological_attributes();
-  
-  $self->_create_vertex_spans();
 
+  $self->_replace_conditionals();
   $self->_dbh->do(q{ ANALYZE });
 }
 
@@ -437,6 +435,8 @@ sub BUILD {
 # TODO: rename to compute_t or whatever
 sub create_t {
   my ($self) = @_;
+
+  $self->_create_vertex_spans();
 
   $self->_file_to_table();
 
@@ -1245,6 +1245,16 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
     warn "automaton over shadow edges, untested";
     my @shadow_edges = @{ $json->decode( $shadow_edges ) };
     $subgraph->add_edges( @shadow_edges );
+    $subgraph->delete_vertex( $v );
+  }
+
+  for my $v ($subgraph->vertices) {
+    my $s = $g2->vp_shadows($v);
+    next unless defined $s;
+    $subgraph->add_edge($_, $s) 
+      for $subgraph->predecessors($v);
+    $subgraph->add_edge($s, $_) 
+      for $subgraph->successors($v);
     $subgraph->delete_vertex( $v );
   }
 

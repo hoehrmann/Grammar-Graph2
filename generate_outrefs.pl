@@ -5,6 +5,7 @@ BEGIN {
   use lib '../Graph-SomeUtils/lib';
   use lib '../Graph-Feather/lib';
   use lib '../Grammar-Graph2/lib';
+  use lib '../Algorithm-ConstructDFA2/lib';
 };
 
 package main;
@@ -32,8 +33,8 @@ use Grammar::Graph2::TestCase;
 
 local $Storable::canonical = 1;
 
-# my @dirs = <./data/reftests/xml*>;
-my @dirs = <./data/reftests/*>;
+my @dirs = <./data/reftests/xml2015-*>;
+#my @dirs = <./data/reftests/*>;
 
 for my $dir (@dirs) {
 

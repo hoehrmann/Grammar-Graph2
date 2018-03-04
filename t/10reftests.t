@@ -36,12 +36,16 @@ use JSON;
 
 use Test::More;
 
+my ($filter) = @ARGV;
+
 my @dirs = File::Find::Rule
     ->directory()
     ->name('*')
     ->in( File::Basename::dirname($0) . '/../data/reftests/' );
 
 for my $dir (sort @dirs) {
+
+  next if defined $filter and index($dir, $filter) < 0;
 
   my $ts = Grammar::Graph2::TestSeries->new(
     base_path => $dir,
