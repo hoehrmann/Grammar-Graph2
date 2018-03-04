@@ -277,7 +277,12 @@ sub _shadow_subgraph_under_automaton {
     my ($dfa_rowid) = $d->_dbh->selectrow_array(
       $sth_rowid_for_state_id, {}, $state_id
     );
-    do { warn; next } unless defined $dfa_rowid;
+
+    if (not defined $dfa_rowid) {
+      warn "Unable to find DFA state $state_id in shadow_tree table";
+      next;
+    }
+
     $self->base_graph->g->add_edge($base_id + $dfa_rowid,
       $new_final_vertex);
   }

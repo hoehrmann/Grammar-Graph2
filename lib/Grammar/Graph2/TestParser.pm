@@ -1273,7 +1273,7 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
     if ($op eq '#exclusion') {
       if ($if2_regular) {
 #        warn;
-        return not $set{$fi2};
+        return ($set{$fi2} and not $set{$fi2});
       }
     }
 
