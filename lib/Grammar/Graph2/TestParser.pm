@@ -645,6 +645,8 @@ sub _update_shadowed {
 
   # TODO: crap code
 
+#return;
+
   $self->_dbh->do(q{
     UPDATE OR REPLACE
       testparser_all_edges 
@@ -679,7 +681,7 @@ sub _update_shadowed {
                   AND shadows IS NOT NULL)
   });
 
-#return;
+# return;
 
   $self->_dbh->do(q{
 
@@ -1231,8 +1233,20 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
     $g2->conditionals_from_if($if);
 
   my $subgraph = Graph::Feather->new(
+    vertices => [ graph_vertices_between($g2->g, $if, $fi) ],
     edges => [ graph_edges_between($g2->g, $if, $fi) ],
   );
+
+  my $json = JSON->new->canonical(1)->ascii(1)->indent(0);
+
+  for my $v ($subgraph->vertices) {
+    my $shadow_edges = $g2->vp_shadow_edges($v);
+    next unless defined $shadow_edges;
+    warn "automaton over shadow edges, untested";
+    my @shadow_edges = @{ $json->decode( $shadow_edges ) };
+    $subgraph->add_edges( @shadow_edges );
+    $subgraph->delete_vertex( $v );
+  }
 
   do { warn "FIXME: hmm if in if?" if 0; return } if grep {
     $g2->is_if_vertex($_) and $_ ne $if
@@ -1258,6 +1272,8 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
   my @accepting = $d->cleanup_dead_states(sub {
     my %set = map { $_ => 1 } @_;
 
+    return $set{$fi};
+
     if ($op eq '#ordered_choice') {
       return $set{$fi1} || $set{$fi2};
     }
@@ -1279,6 +1295,8 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
 
     return $set{$fi};
   });
+
+#  @accepting = ();
 
   if ($op eq '#ordered_choice' and $if1_regular) {
 #    warn;

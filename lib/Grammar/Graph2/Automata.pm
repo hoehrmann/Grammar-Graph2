@@ -100,7 +100,7 @@ sub _shadow_subgraph_under_automaton {
       s.state_id AS src_state,
       NULL as run_list,
       NULL as dst_state,
-      '' AS type,
+      'DFAState:' || s.state_id AS type,
       json_group_array(json_array(
         CAST(e.src AS TEXT),
         CAST(e.dst AS TEXT)
@@ -286,6 +286,18 @@ sub _shadow_subgraph_under_automaton {
     $self->base_graph->g->add_edge($base_id + $dfa_rowid,
       $new_final_vertex);
   }
+
+  $self->base_graph->g->delete_edges( 
+    map {
+      $subgraph->edges_at($_)
+    } grep { 
+      $_ ne $start_vertex and $_ ne $final_vertex
+    } $subgraph->vertices
+  ) if 1;
+
+#  $self->base_graph->g->delete_edges(map {
+#    $self->base_graph->g->edges_at($_)
+#  } $subgraph->vertices);
 
   $d->_dbh->rollback();
 }
