@@ -3,21 +3,19 @@ use strict;
 use warnings;
 use 5.024000;
 use Moo;
-use Graph::Feather;
-use Graph::Directed;
-use Grammar::Graph2;
 use Log::Any qw//;
 use Types::Standard qw/:all/;
-use Grammar::Graph2::TestParser::MatchEnumerator;
 use List::Util qw/min max/;
-use Graph::SomeUtils qw/:all/;
-use Grammar::Graph2::Automata;
 use List::OrderBy;
 use List::StackBy;
 
-# mixin
-
-use Grammar::Graph2::TestParser::Topology;
+use Graph::Feather;
+use Graph::Directed;
+use Graph::SomeUtils qw/:all/;
+use Grammar::Graph2;
+use Grammar::Graph2::TestParser::MatchEnumerator;
+use Grammar::Graph2::Automata;
+use Grammar::Graph2::Topology;
 
 has 'input_path' => (
   is       => 'ro',
@@ -54,217 +52,6 @@ sub BUILD {
   $self->_dbh( $self->g->g->{dbh} );
 
   local $self->g->g->{dbh}->{sqlite_allow_multiple_statements} = 1;
-
-  $self->_dbh->do(q{
-    /*
-    DROP TABLE IF EXISTS t;
-    DROP TABLE IF EXISTS testparser_input;
-    DROP TABLE IF EXISTS testparser_all_edges;
-    DROP TABLE IF EXISTS result;
-    */
-    DROP VIEW IF EXISTS view_top_down_reachable;
-    DROP VIEW IF EXISTS view_parent_child_signature;
-    DROP VIEW IF EXISTS view_sibling_signature;
-
-    -----------------------------------------------------------------
-    -- view_parent_child
-    -----------------------------------------------------------------
-
-    DROP VIEW IF EXISTS view_parent_child;
-    CREATE VIEW view_parent_child AS
-    WITH RECURSIVE pc(parent, child) AS (
-
-      SELECT
-        Edge.src AS parent,
-        Edge.dst AS child
-      FROM
-        Edge
-          INNER JOIN vertex_property as dst_p
-            ON (dst_p.vertex = Edge.dst)
-          INNER JOIN vertex_property as src_p
-            ON (src_p.vertex = Edge.src)
-      WHERE
-        src_p.is_push
-        -- AND dst_p.vertex <> src_p.partner
-
-      UNION
-
-      SELECT
-        r.parent AS parent,
-        COALESCE(partner_edges.dst, Edge.dst) AS child
-      FROM Edge
-        INNER JOIN pc AS r
-          ON (Edge.src = r.child)
-        INNER JOIN vertex_property AS src_p
-          ON (Edge.src = src_p.vertex)
-        INNER JOIN vertex_property AS dst_p
-          ON (Edge.dst = dst_p.vertex)
-        INNER JOIN vertex_property AS parent_p
-          ON (r.parent = parent_p.vertex)
-        INNER JOIN vertex_property AS child_p
-          ON (r.child = child_p.vertex)
-        LEFT JOIN Edge partner_edges
-          ON (src_p.partner = partner_edges.src
-            and src_p.is_push)
-      WHERE
-        parent_p.partner <> src_p.vertex
-        -- AND COALESCE(partner_edges.dst, Edge.dst) <> parent_p.partner
-    )
-    SELECT
-      pc.*
-    FROM
-      pc
-        INNER JOIN vertex_property AS parent_p
-          ON (pc.parent = parent_p.vertex)
-        INNER JOIN vertex_property AS child_p
-          ON (pc.child = child_p.vertex)
-    WHERE
-      1
-      -- OR child_p.is_push
-
-    ;
-    
-    -----------------------------------------------------------------
-    -- view_paradoxical
-    -----------------------------------------------------------------
-
-    DROP VIEW IF EXISTS view_paradoxical;
-    CREATE VIEW view_paradoxical(parent, child) AS
-    WITH RECURSIVE
-    paradoxical(parent, child) AS (
-      SELECT parent, child
-      FROM view_parent_child
-      INTERSECT
-      SELECT child, parent
-      FROM view_parent_child
-    )
-    SELECT
-      parent,
-      child
-    FROM
-      paradoxical
-    ;
-
-    -----------------------------------------------------------------
-    -- view_productive_loops
-    -----------------------------------------------------------------
-
-    DROP VIEW IF EXISTS view_productive_loops;
-    CREATE VIEW view_productive_loops AS
-    WITH RECURSIVE
-    path(root, is_productive, dst) AS (
-      SELECT
-        src_p.vertex AS root,
-        0 AS is_productive,
-        dst_p.vertex AS dst
-      FROM
-        Edge
-          INNER JOIN vertex_property as dst_p
-            ON (dst_p.vertex = Edge.dst)
-          INNER JOIN vertex_property as src_p
-            ON (src_p.vertex = Edge.src)
-      WHERE
-        src_p.partner IS NOT NULL
-        AND (
-          src_p.vertex IN (SELECT parent FROM view_paradoxical)
-          OR src_p.partner IN (SELECT parent FROM view_paradoxical)
-        )
-
-      UNION
-
-      SELECT
-        root_p.vertex AS root,
-        r.is_productive
-          OR src_p.type = 'Input' AS is_productive,
-        dst_p.vertex AS dst
-      FROM
-        path r
-          INNER JOIN Edge
-            ON (Edge.src = r.dst)
-          INNER JOIN vertex_property as src_p
-            ON (src_p.vertex = Edge.src)
-          INNER JOIN vertex_property as dst_p
-            ON (dst_p.vertex = Edge.dst)
-          INNER JOIN vertex_property as root_p
-            ON (root_p.vertex = r.root)
-            
-      WHERE
-        1 = 1
-        AND src_p.vertex <> r.root
-        AND src_p.vertex <> root_p.partner
-    )
-    SELECT
-      root AS vertex
-    FROM
-      path
-    WHERE
-      root = dst
-    GROUP BY
-      root,
-      dst
-    HAVING
-      MAX(is_productive) = 1
-
-    ;
-
-    -----------------------------------------------------------------
-    -- view_self_loop
-    -----------------------------------------------------------------
-
-    DROP VIEW IF EXISTS view_self_loop;
-    CREATE VIEW view_self_loop AS
-    SELECT
-      src_p.vertex AS vertex,
-      CASE
-      WHEN (productive_loops.vertex IS NOT NULL) THEN 'irregular'
-      WHEN (start_paradox.parent IS NOT NULL) THEN 'linear'
-      WHEN (final_paradox.parent IS NOT NULL) THEN 'linear'
-      ELSE 'no'
-      END AS self_loop
-    FROM
-      vertex_property src_p
-        LEFT JOIN view_paradoxical start_paradox
-          ON (start_paradox.parent = src_p.vertex)
-        LEFT JOIN view_paradoxical final_paradox
-          ON (final_paradox.parent = src_p.partner)
-        LEFT JOIN view_productive_loops productive_loops
-          ON (productive_loops.vertex = src_p.vertex)
-
-    ;
-
-    -----------------------------------------------------------------
-    -- view_epsilon_closure
-    -----------------------------------------------------------------
-
-    DROP VIEW IF EXISTS view_epsilon_closure;
-    CREATE VIEW view_epsilon_closure(vertex, e_reachable) AS
-    WITH RECURSIVE
-    all_e_successors_and_self(root, v) AS (
-
-      SELECT vertex AS root, vertex AS v FROM vertex_property
-
-      UNION
-
-      SELECT
-        r.root,
-        Edge.dst
-      FROM
-        Edge
-          INNER JOIN all_e_successors_and_self AS r
-            ON (Edge.src = r.v)
-          INNER JOIN vertex_property AS src_p
-            ON (Edge.src = src_p.vertex)
-      WHERE
-        src_p.type <> 'Input'
-    )
-    SELECT
-      root AS vertex,
-      v AS e_reachable
-    FROM
-      all_e_successors_and_self
-    ;
-
-  });
 
   # Testparser VIEWs
   $self->_dbh->do(q{
@@ -424,8 +211,9 @@ sub BUILD {
     ;
   });
 
-  $self->_add_self_loop_attributes();
-  $self->_add_topological_attributes();
+  Grammar::Graph2::Topology->new(
+    g => $self->g,
+  );
 
   $self->_replace_conditionals();
   $self->_dbh->do(q{ ANALYZE });
