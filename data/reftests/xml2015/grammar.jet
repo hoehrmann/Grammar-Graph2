@@ -9,7 +9,7 @@
         ["ref", {"name": "Misc"}, []]]]]]]],
 
   ["rule", {"name": "Char"}, [
-    ["choice", {}, [
+    ["ranges", {}, [
       ["range", {"first": 9, "last": 9}, []],
       ["range", {"first": 10, "last": 10}, []],
       ["range", {"first": 13, "last": 13}, []],
@@ -19,7 +19,7 @@
 
   ["rule", {"name": "S"}, [
     ["repetition", {"max": null, "min": "1"}, [
-      ["choice", {}, [
+      ["ranges", {}, [
         ["range", {"first": 9, "last": 9}, []],
         ["range", {"first": 13, "last": 13}, []],
         ["range", {"first": 10, "last": 10}, []],
@@ -71,7 +71,7 @@
         ["range", {"first": 34, "last": 34}, []],
         ["repetition", {"max": null, "min": 0}, [
           ["choice", {}, [
-            ["choice", {}, [
+            ["ranges", {}, [
               ["range", {"first": 9, "last": 10}, []],
               ["range", {"first": 13, "last": 13}, []],
               ["range", {"first": 32, "last": 33}, []],
@@ -86,7 +86,7 @@
         ["range", {"first": 39, "last": 39}, []],
         ["repetition", {"max": null, "min": 0}, [
           ["choice", {}, [
-            ["choice", {}, [
+            ["ranges", {}, [
               ["range", {"first": 9, "last": 10}, []],
               ["range", {"first": 13, "last": 13}, []],
               ["range", {"first": 32, "last": 36}, []],
@@ -103,7 +103,7 @@
         ["range", {"first": 34, "last": 34}, []],
         ["repetition", {"max": null, "min": 0}, [
           ["choice", {}, [
-            ["choice", {}, [
+            ["ranges", {}, [
               ["range", {"first": 9, "last": 10}, []],
               ["range", {"first": 13, "last": 13}, []],
               ["range", {"first": 32, "last": 33}, []],
@@ -118,7 +118,7 @@
         ["range", {"first": 39, "last": 39}, []],
         ["repetition", {"max": null, "min": 0}, [
           ["choice", {}, [
-            ["choice", {}, [
+            ["ranges", {}, [
               ["range", {"first": 9, "last": 10}, []],
               ["range", {"first": 13, "last": 13}, []],
               ["range", {"first": 32, "last": 37}, []],
@@ -134,7 +134,7 @@
       ["group", {}, [
         ["range", {"first": 34, "last": 34}, []],
         ["repetition", {"max": null, "min": 0}, [
-          ["choice", {}, [
+          ["ranges", {}, [
             ["range", {"first": 9, "last": 10}, []],
             ["range", {"first": 13, "last": 13}, []],
             ["range", {"first": 32, "last": 33}, []],
@@ -145,7 +145,7 @@
       ["group", {}, [
         ["range", {"first": 39, "last": 39}, []],
         ["repetition", {"max": null, "min": 0}, [
-          ["choice", {}, [
+          ["ranges", {}, [
             ["range", {"first": 9, "last": 10}, []],
             ["range", {"first": 13, "last": 13}, []],
             ["range", {"first": 32, "last": 38}, []],
@@ -164,7 +164,7 @@
       ["group", {}, [
         ["range", {"first": 39, "last": 39}, []],
         ["repetition", {"max": null, "min": 0}, [
-          ["choice", {}, [
+          ["ranges", {}, [
             ["range", {"first": 9, "last": 10}, []],
             ["range", {"first": 13, "last": 13}, []],
             ["range", {"first": 32, "last": 38}, []],
@@ -174,7 +174,7 @@
         ["range", {"first": 39, "last": 39}, []]]]]]]],
 
   ["rule", {"name": "PubidChar"}, [
-    ["choice", {}, [
+    ["ranges", {}, [
       ["range", {"first": 32, "last": 32}, []],
       ["range", {"first": 13, "last": 13}, []],
       ["range", {"first": 10, "last": 10}, []],
@@ -201,7 +201,7 @@
   ["rule", {"name": "CharData"}, [
     ["exclusion", {}, [
       ["repetition", {"max": null, "min": 0}, [
-        ["choice", {}, [
+        ["ranges", {}, [
           ["range", {"first": 9, "last": 10}, []],
           ["range", {"first": 13, "last": 13}, []],
           ["range", {"first": 32, "last": 37}, []],
@@ -211,7 +211,7 @@
           ["range", {"first": 65536, "last": 1114111}, []]]]]],
       ["group", {}, [
         ["repetition", {"max": null, "min": 0}, [
-          ["choice", {}, [
+          ["ranges", {}, [
             ["range", {"first": 9, "last": 10}, []],
             ["range", {"first": 13, "last": 13}, []],
             ["range", {"first": 32, "last": 37}, []],
@@ -221,7 +221,7 @@
             ["range", {"first": 65536, "last": 1114111}, []]]]]],
         ["string", {"text": "]]>"}, []],
         ["repetition", {"max": null, "min": 0}, [
-          ["choice", {}, [
+          ["ranges", {}, [
             ["range", {"first": 9, "last": 10}, []],
             ["range", {"first": 13, "last": 13}, []],
             ["range", {"first": 32, "last": 37}, []],
@@ -235,7 +235,7 @@
       ["string", {"text": "<!--"}, []],
       ["repetition", {"max": null, "min": 0}, [
         ["choice", {}, [
-          ["choice", {}, [
+          ["ranges", {}, [
             ["range", {"first": 9, "last": 10}, []],
             ["range", {"first": 13, "last": 13}, []],
             ["range", {"first": 32, "last": 44}, []],
@@ -244,7 +244,7 @@
             ["range", {"first": 65536, "last": 1114111}, []]]],
           ["group", {}, [
             ["range", {"first": 45, "last": 45}, []],
-            ["choice", {}, [
+            ["ranges", {}, [
               ["range", {"first": 9, "last": 10}, []],
               ["range", {"first": 13, "last": 13}, []],
               ["range", {"first": 32, "last": 44}, []],
@@ -875,11 +875,11 @@
 
   ["rule", {"name": "EncName"}, [
     ["group", {}, [
-      ["choice", {}, [
+      ["ranges", {}, [
         ["range", {"first": 97, "last": 122}, []],
         ["range", {"first": 65, "last": 90}, []]]],
       ["repetition", {"max": null, "min": 0}, [
-        ["choice", {}, [
+        ["ranges", {}, [
           ["range", {"first": 97, "last": 122}, []],
           ["range", {"first": 65, "last": 90}, []],
           ["range", {"first": 48, "last": 57}, []],
@@ -912,7 +912,7 @@
       ["ref", {"name": "Ideographic"}, []]]]]],
 
   ["rule", {"name": "BaseChar"}, [
-    ["choice", {}, [
+    ["ranges", {}, [
       ["range", {"first": 65, "last": 90}, []],
       ["range", {"first": 97, "last": 122}, []],
       ["range", {"first": 192, "last": 214}, []],
@@ -1117,13 +1117,13 @@
       ["range", {"first": 44032, "last": 55203}, []]]]]],
 
   ["rule", {"name": "Ideographic"}, [
-    ["choice", {}, [
+    ["ranges", {}, [
       ["range", {"first": 19968, "last": 40869}, []],
       ["range", {"first": 12295, "last": 12295}, []],
       ["range", {"first": 12321, "last": 12329}, []]]]]],
 
   ["rule", {"name": "CombiningChar"}, [
-    ["choice", {}, [
+    ["ranges", {}, [
       ["range", {"first": 768, "last": 837}, []],
       ["range", {"first": 864, "last": 865}, []],
       ["range", {"first": 1155, "last": 1158}, []],
@@ -1221,7 +1221,7 @@
       ["range", {"first": 12442, "last": 12442}, []]]]]],
 
   ["rule", {"name": "Digit"}, [
-    ["choice", {}, [
+    ["ranges", {}, [
       ["range", {"first": 48, "last": 57}, []],
       ["range", {"first": 1632, "last": 1641}, []],
       ["range", {"first": 1776, "last": 1785}, []],
@@ -1239,7 +1239,7 @@
       ["range", {"first": 3872, "last": 3881}, []]]]]],
 
   ["rule", {"name": "Extender"}, [
-    ["choice", {}, [
+    ["ranges", {}, [
       ["range", {"first": 183, "last": 183}, []],
       ["range", {"first": 720, "last": 720}, []],
       ["range", {"first": 721, "last": 721}, []],

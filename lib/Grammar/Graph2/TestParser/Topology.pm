@@ -160,6 +160,8 @@ sub _add_topological_attributes {
   my $t1 = $self->_topo_epsilon();
   my $t2 = $self->_topo_parent_child();
 
+  # FIXME: something to do with unreachable vertices?
+
   for ($self->g->g->vertices) {
     warn $_ unless defined $t1->{$_}{vertex};
     $self->g->vp_epsilon_group($_,

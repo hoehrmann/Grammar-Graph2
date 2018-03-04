@@ -56,10 +56,12 @@ sub BUILD {
   local $self->g->g->{dbh}->{sqlite_allow_multiple_statements} = 1;
 
   $self->_dbh->do(q{
+    /*
     DROP TABLE IF EXISTS t;
     DROP TABLE IF EXISTS testparser_input;
     DROP TABLE IF EXISTS testparser_all_edges;
     DROP TABLE IF EXISTS result;
+    */
     DROP VIEW IF EXISTS view_top_down_reachable;
     DROP VIEW IF EXISTS view_parent_child_signature;
     DROP VIEW IF EXISTS view_sibling_signature;
@@ -440,10 +442,10 @@ sub create_t {
 
   $self->_create_grammar_input_cross_product();
 
-  $self->_create_without_unreachable_vertices();
-
   # undoes _replace_conditionals
   $self->_update_shadowed();
+
+  $self->_create_without_unreachable_vertices();
 
   $self->_dbh->do(q{ ANALYZE });
 
@@ -645,36 +647,73 @@ sub _update_shadowed {
 
   $self->_dbh->do(q{
     UPDATE OR REPLACE
-      result
+      testparser_all_edges 
     SET
       src_vertex = (SELECT shadows
                     FROM vertex_property
-                    WHERE result.src_vertex
+                    WHERE testparser_all_edges.src_vertex
                       = vertex_property.vertex)
     WHERE
       EXISTS (SELECT 1
               FROM vertex_property
               WHERE
-                result.src_vertex
+                testparser_all_edges.src_vertex
                   = vertex_property.vertex
                   AND shadows IS NOT NULL)
   });
 
   $self->_dbh->do(q{
     UPDATE OR REPLACE
-      result
+      testparser_all_edges
     SET
       dst_vertex = (SELECT shadows
                     FROM vertex_property
-                    WHERE result.dst_vertex
+                    WHERE testparser_all_edges.dst_vertex
                       = vertex_property.vertex)
     WHERE
       EXISTS (SELECT 1
               FROM vertex_property
               WHERE
-                result.dst_vertex
+                testparser_all_edges.dst_vertex
                   = vertex_property.vertex
                   AND shadows IS NOT NULL)
+  });
+
+#return;
+
+  $self->_dbh->do(q{
+
+    INSERT OR IGNORE INTO testparser_all_edges(src_pos,
+      src_vertex, dst_pos, dst_vertex)
+    SELECT DISTINCT
+      a.src_pos AS src_pos,
+      json_extract(each.value, '$[0]') AS src_vertex,
+      CASE
+        WHEN src_p.type = 'Input' THEN a.src_pos + 1
+        ELSE a.src_pos
+      END AS dst_pos,
+      json_extract(each.value, '$[1]') AS dst_vertex
+    FROM
+      testparser_all_edges a
+        INNER JOIN vertex_property src_p
+          ON (a.src_vertex = src_p.vertex
+            -- AND src_p.shadow_edges IS NOT NULL
+            )
+        INNER JOIN json_each(src_p.shadow_edges) each
+          ON (1)
+  });
+
+  $self->_dbh->do(q{
+    DELETE FROM testparser_all_edges
+    WHERE
+      EXISTS (SELECT 1
+              FROM vertex_property p
+              WHERE p.shadow_edges IS NOT NULL
+                AND (
+                  testparser_all_edges.dst_vertex = p.vertex
+                  OR
+                  testparser_all_edges.src_vertex = p.vertex
+                ))
   });
 
 }
@@ -1203,7 +1242,7 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
     base_graph => $g2,
   );
 
-  my $d = $automata->subgraph_automaton($subgraph, $if);
+  my ($d, $start_id) = $automata->subgraph_automaton($subgraph, $if);
 
   my $op = $g2->vp_name($if);
 
@@ -1255,7 +1294,9 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
     $sth->finish();
   }
 
-  $automata->_shadow_subgraph_under_automaton($subgraph, $d);
+  my ($src, $dst) = $automata
+    ->_shadow_subgraph_under_automaton($subgraph, $d,
+      $if, $fi, $start_id, \@accepting);
 
   return 1;
 }

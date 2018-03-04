@@ -60,7 +60,7 @@
       ]]]],
 
   ["rule", {"name": "Char"}, [
-    ["choice", {}, [
+    ["ranges", {}, [
       ["range", {"first": 9, "last": 9}, []],
       ["range", {"first": 10, "last": 10}, []],
       ["range", {"first": 13, "last": 13}, []],
@@ -74,7 +74,7 @@
       ["ref", {"name": "Ideographic"}, []]]]]],
 
   ["rule", {"name": "BaseChar"}, [
-    ["choice", {}, [
+    ["ranges", {}, [
       ["range", {"first": 65, "last": 90}, []],
       ["range", {"first": 97, "last": 122}, []],
       ["range", {"first": 192, "last": 214}, []],
@@ -279,13 +279,13 @@
       ["range", {"first": 44032, "last": 55203}, []]]]]],
 
   ["rule", {"name": "Ideographic"}, [
-    ["choice", {}, [
+    ["ranges", {}, [
       ["range", {"first": 19968, "last": 40869}, []],
       ["range", {"first": 12295, "last": 12295}, []],
       ["range", {"first": 12321, "last": 12329}, []]]]]],
 
   ["rule", {"name": "Digit"}, [
-    ["choice", {}, [
+    ["ranges", {}, [
       ["range", {"first": 48, "last": 57}, []],
       ["range", {"first": 1632, "last": 1641}, []],
       ["range", {"first": 1776, "last": 1785}, []],

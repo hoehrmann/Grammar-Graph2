@@ -10,13 +10,18 @@ use File::Spec qw//;
 use List::UtilsBy qw/partition_by sort_by uniq_by/;
 use Set::IntSpan;
 use Set::IntSpan::Partition;
-use List::Util qw/uniq/;
+use List::Util qw/uniq first/;
 
 local $Storable::canonical = 1;
 
 has 'g' => (
   is       => 'ro',
   required => 1,
+);
+
+has '_ord_to_list' => (
+  is       => 'ro',
+  writer   => '_set_ord_to_list',
 );
 
 has '_log' => (
@@ -27,11 +32,8 @@ has '_log' => (
   },
 );
 
-sub first_ords {
+sub BUILD {
   my ($self) = @_;
-
-  # TODO: make instead a representative_ords method that also
-  # supports open intervals?
 
   my @spans = 
     map { Set::IntSpan->new($_) }
@@ -40,11 +42,27 @@ sub first_ords {
       $self->g->vp_run_list($_)
     } $self->g->g->vertices;
 
-  return
-    uniq
-    map { $_->first }
-    map { @$_ }
-    values %{{ intspan_partition_map( @spans ) }};
+  my $first = sub {
+    my ($set) = @_;
+    return if $set->empty;
+    my ($span) = $set->spans;
+    return first { defined } @$span, 0;
+  };
+
+  my %h;
+
+  $self->_set_ord_to_list(\%h);
+
+  for (map { @$_ } values %{ { intspan_partition_map( @spans ) } }) {
+    $h{ $first->($_) } = $_->run_list;
+  }
+
+}
+
+sub first_ords {
+  my ($self) = @_;
+
+  return keys %{ $self->_ord_to_list };
 }
 
 1;

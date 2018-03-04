@@ -29,6 +29,7 @@ sub vp_p2            { _rw_vertex_attribute('p2',            @_) }
 sub vp_partner       { _rw_vertex_attribute('partner',       @_) }
 sub vp_run_list      { _rw_vertex_attribute('run_list',      @_) }
 sub vp_shadows       { _rw_vertex_attribute('shadows',       @_) }
+sub vp_shadow_edges  { _rw_vertex_attribute('shadow_edges',  @_) }
 sub vp_self_loop     { _rw_vertex_attribute('self_loop',     @_) }
 sub vp_topo          { _rw_vertex_attribute('topo',          @_) }
 sub vp_epsilon_group { _rw_vertex_attribute('epsilon_group', @_) }
@@ -189,6 +190,7 @@ sub from_grammar_graph {
       is_pop,
       run_list,
       shadows,
+      shadow_edges,
       self_loop DEFAULT 'no',
       topo,
       epsilon_group
@@ -216,8 +218,8 @@ sub from_grammar_graph {
     $self->vp_run_list($v, $old->vp_run_list($v))
       if $old->g->has_vertex_attribute($v, 'run_list');
 
-    $self->vp_shadows($v, $old->vp_shadows($v))
-      if $old->g->has_vertex_attribute($v, 'shadows');
+#    $self->vp_shadows($v, $old->vp_shadows($v))
+#      if $old->g->has_vertex_attribute($v, 'shadows');
 
     my $type = $old->vp_type($v);
 
