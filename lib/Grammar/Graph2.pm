@@ -103,6 +103,8 @@ sub _rw_vertex_attribute {
 
   if (@_ > 3) {
 
+    die if $name eq 'shadows' and defined $self->vp_shadows($value);
+
     # TODO: this could be nicer
 
     $self->g->{dbh}->do(sprintf(q{

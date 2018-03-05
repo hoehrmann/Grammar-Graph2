@@ -231,9 +231,13 @@ sub create_t {
   $self->_create_grammar_input_cross_product();
 
   # undoes _replace_conditionals
-  $self->_update_shadowed();
+  $self->_update_shadowed_testparser_all_edges();
 
   $self->_create_without_unreachable_vertices();
+
+#  $self->_update_shadowed_result();
+#  $self->_update_shadowed_result();
+#  $self->_update_shadowed_result();
 
   $self->_dbh->do(q{ ANALYZE });
 
@@ -428,7 +432,7 @@ sub _create_grammar_input_cross_product {
   });
 }
 
-sub _update_shadowed {
+sub _update_shadowed_testparser_all_edges {
   my ($self) = @_;
 
   # TODO: crap code
@@ -507,6 +511,87 @@ sub _update_shadowed {
   });
 
 }
+
+sub _update_shadowed_result {
+  my ($self) = @_;
+
+  # TODO: crap code
+
+#return;
+
+  $self->_dbh->do(q{
+    UPDATE OR REPLACE
+      result 
+    SET
+      src_vertex = (SELECT shadows
+                    FROM vertex_property
+                    WHERE result.src_vertex
+                      = vertex_property.vertex)
+    WHERE
+      EXISTS (SELECT 1
+              FROM vertex_property
+              WHERE
+                result.src_vertex
+                  = vertex_property.vertex
+                  AND shadows IS NOT NULL)
+  });
+
+  $self->_dbh->do(q{
+    UPDATE OR REPLACE
+      result
+    SET
+      dst_vertex = (SELECT shadows
+                    FROM vertex_property
+                    WHERE result.dst_vertex
+                      = vertex_property.vertex)
+    WHERE
+      EXISTS (SELECT 1
+              FROM vertex_property
+              WHERE
+                result.dst_vertex
+                  = vertex_property.vertex
+                  AND shadows IS NOT NULL)
+  });
+
+# return;
+
+  $self->_dbh->do(q{
+
+    INSERT OR IGNORE INTO result(src_pos,
+      src_vertex, dst_pos, dst_vertex)
+    SELECT DISTINCT
+      a.src_pos AS src_pos,
+      json_extract(each.value, '$[0]') AS src_vertex,
+      CASE
+        WHEN src_p.type = 'Input' THEN a.src_pos + 1
+        ELSE a.src_pos
+      END AS dst_pos,
+      json_extract(each.value, '$[1]') AS dst_vertex
+    FROM
+      result a
+        INNER JOIN vertex_property src_p
+          ON (a.src_vertex = src_p.vertex
+            -- AND src_p.shadow_edges IS NOT NULL
+            )
+        INNER JOIN json_each(src_p.shadow_edges) each
+          ON (1)
+  });
+
+  $self->_dbh->do(q{
+    DELETE FROM result
+    WHERE
+      EXISTS (SELECT 1
+              FROM vertex_property p
+              WHERE p.shadow_edges IS NOT NULL
+                AND (
+                  result.dst_vertex = p.vertex
+                  OR
+                  result.src_vertex = p.vertex
+                ))
+  });
+
+}
+
 
 sub _create_without_unreachable_vertices_new {
   my ($self) = @_;
@@ -1011,10 +1096,6 @@ sub _replace_conditionals {
 sub _replace_if_fi_by_unmodified_dfa_vertices {
   my ($g2, $if) = @_;
 
-  # 
-  # ResolveConditionals.pm
-  # 
-
   die unless $g2->is_if_vertex($if);
 
   my (undef, $if1, $if2, $fi2, $fi1, $fi) =
@@ -1026,25 +1107,6 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
   );
 
   my $json = JSON->new->canonical(1)->ascii(1)->indent(0);
-
-  for my $v ($subgraph->vertices) {
-    my $shadow_edges = $g2->vp_shadow_edges($v);
-    next unless defined $shadow_edges;
-    warn "automaton over shadow edges, untested";
-    my @shadow_edges = @{ $json->decode( $shadow_edges ) };
-    $subgraph->add_edges( @shadow_edges );
-    $subgraph->delete_vertex( $v );
-  }
-
-  for my $v ($subgraph->vertices) {
-    my $s = $g2->vp_shadows($v);
-    next unless defined $s;
-    $subgraph->add_edge($_, $s) 
-      for $subgraph->predecessors($v);
-    $subgraph->add_edge($s, $_) 
-      for $subgraph->successors($v);
-    $subgraph->delete_vertex( $v );
-  }
 
   do { warn "FIXME: hmm if in if?" if 0; return } if grep {
     $g2->is_if_vertex($_) and $_ ne $if
@@ -1070,8 +1132,6 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
   my @accepting = $d->cleanup_dead_states(sub {
     my %set = map { $_ => 1 } @_;
 
-    return $set{$fi};
-
     if ($op eq '#ordered_choice') {
       return $set{$fi1} || $set{$fi2};
     }
@@ -1086,33 +1146,38 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
 
     if ($op eq '#exclusion') {
       if ($if2_regular) {
-#        warn;
-        return ($set{$fi2} and not $set{$fi2});
+        return ($set{$fi1} and not $set{$fi2});
       }
     }
 
     return $set{$fi};
   });
 
-#  @accepting = ();
-
-  if ($op eq '#ordered_choice' and $if1_regular) {
-#    warn;
-    my $sth = $d->_dbh->prepare(q{
-      DELETE FROM Configuration
-      WHERE vertex = ?
-        AND EXISTS (SELECT 1
-                    FROM Configuration c2
-                    WHERE c2.state = Configuration.state
-                      AND c2.vertex = ?)
-    });
-    $sth->execute($fi2, $fi1);
-    $sth->finish();
-  }
-
   my ($src, $dst) = $automata
     ->_shadow_subgraph_under_automaton($subgraph, $d,
       $if, $fi, $start_id, \@accepting);
+
+  for my $v ($g2->g->vertices) {
+    last unless $if1_regular;
+    last unless $op eq '#ordered_choice';
+
+    my $shadow_edges = $g2->vp_shadow_edges($v);
+    next unless defined $shadow_edges;
+
+    my $decoded = $json->decode($shadow_edges);
+    next unless grep {
+      $_->[0] eq $fi1 and $_->[1] eq $fi
+    } @$decoded;
+
+    my @filtered = grep {
+      not($_->[0] eq $fi2 and $_->[1] eq $fi)
+      and
+      not($_->[1] eq $fi2)
+    } @$decoded;
+
+    $g2->vp_shadow_edges($v, $json->encode(\@filtered))
+      if @filtered != @$decoded;
+  }
 
   return 1;
 }
@@ -1127,41 +1192,30 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
 __END__
 
 
-/*
-      WITH 
-      edge_property(rowid, is_group) AS (
-        SELECT
-          t.rowid AS rowid,
-          COALESCE(mid1_p.is_pop, 0) AS is_group
-        FROM 
-          t
-            INNER JOIN vertex_property src_p
-              ON (src_p.vertex = t.src_vertex)
-            LEFT JOIN vertex_property mid1_p
-              ON (mid1_p.vertex = t.mid_src_vertex)
-            LEFT JOIN vertex_property mid2_p
-              ON (mid2_p.vertex = t.mid_dst_vertex)
-            INNER JOIN vertex_property dst_p
-              ON (dst_p.vertex = t.dst_vertex)
-      )
-*/
-
-
-/*
-          INNER JOIN edge_property left_p
-            ON (left_p.rowid = left_.rowid)
-          INNER JOIN edge_property middle_p
-            ON (middle_p.rowid = middle_.rowid)
-          INNER JOIN edge_property right_p
-            ON (right_p.rowid = right_.rowid)
-*/
-
-/*
-
-        NOT(left_p.is_group AND right_p.is_group) AND
-        NOT(left_p.is_group AND middle_p.is_group) AND
-        NOT(middle_p.is_group AND right_p.is_group) AND
-        NOT(right_p.is_group) AND
-
-*/
+  q{
+    WITH fi2_fi(vertex, json_key) AS (
+      SELECT
+        vertex_p.vertex AS vertex,
+        each2.fullkey AS fi2_fi_key
+      FROM
+        vertex_property vertex_p
+          INNER JOIN
+            json_each(vertex_p.shadow_edges) each1
+          INNER JOIN
+            json_each(vertex_p.shadow_edges) each2
+      WHERE
+        json_extract(each1.value, '$[0]') = ?
+        AND
+        json_extract(each1.value, '$[1]') = ?
+        AND
+        json_extract(each2.value, '$[0]') = ?
+        AND
+        json_extract(each2.value, '$[1]') = ?
+    )
+    UPDATE
+      vertex_property
+    SET
+      shadow_edges = json_remove(shadow_edges, ...)
+      
+  };
 

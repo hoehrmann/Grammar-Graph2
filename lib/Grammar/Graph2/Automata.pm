@@ -7,7 +7,7 @@ use Grammar::Graph2;
 use Log::Any qw//;
 use Types::Standard qw/:all/;
 use File::Spec qw//;
-use List::UtilsBy qw/partition_by sort_by uniq_by/;
+use List::UtilsBy qw/partition_by sort_by nsort_by uniq_by/;
 use List::MoreUtils qw/uniq/;
 use Grammar::Graph2::Alphabet;
 use Graph::SomeUtils qw/:all/;
@@ -164,15 +164,55 @@ sub _shadow_subgraph_under_automaton {
 
   my $json = JSON->new->canonical(1)->ascii(1)->indent(0);
 
+  my $cleanup_shadow_edges = sub {
+
+    my @edges = @_;
+    my @result;
+
+    while (@edges) {
+      my $current = shift @edges;
+
+      next unless defined $current;
+
+      my ($src, $dst) = @$current;
+
+      next unless defined $src;
+
+      if (defined $self->base_graph->vp_shadows($src)) {
+        $src = $self->base_graph->vp_shadows($src);
+      }
+
+      if (defined $self->base_graph->vp_shadows($dst)) {
+        $dst = $self->base_graph->vp_shadows($dst);
+      }
+
+      my $src_shadows = $self->base_graph->vp_shadow_edges($src);
+      my $dst_shadows = $self->base_graph->vp_shadow_edges($dst);
+
+      if (defined $src_shadows) {
+        push @result, @{ $json->decode( $src_shadows ) };
+        next;
+      }
+      
+      if (defined $dst_shadows) {
+        next;
+      }
+
+      push @result, [$src, $dst]
+    }
+
+    return nsort_by { $_->[0] } @result;
+  };
+
   my %cache;
 
   while (my $row = $sth_new_vertices->fetchrow_arrayref) {
     my ($rowid, $src_state, $run_list, $dst_state, $type, $shadow_edges) =
       @$row;
 
-    $shadow_edges = $json->encode([ grep {
-      defined $_->[0]
-    } @{ $json->decode($shadow_edges) } ]);
+    $shadow_edges = $json->encode([
+      $cleanup_shadow_edges->(@{ $json->decode($shadow_edges) })
+    ]);
 
     $self->base_graph->vp_type($base_id + $rowid, $type);
     $self->base_graph->vp_shadow_edges($base_id + $rowid, $shadow_edges);
