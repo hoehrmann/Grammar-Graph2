@@ -1103,14 +1103,30 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
 
   my $subgraph = Graph::Feather->new(
     vertices => [ graph_vertices_between($g2->g, $if, $fi) ],
-    edges => [ graph_edges_between($g2->g, $if, $fi) ],
+    edges    => [    graph_edges_between($g2->g, $if, $fi) ],
   );
 
   my $json = JSON->new->canonical(1)->ascii(1)->indent(0);
 
-  do { warn "FIXME: hmm if in if?" if 0; return } if grep {
-    $g2->is_if_vertex($_) and $_ ne $if
-  } $subgraph->vertices;
+  for my $v ($subgraph->vertices) {
+    next unless $g2->is_if_vertex($v);
+    next if $v eq $if;
+    warn "FIXME: hmm if in if? found $v between $if and $fi";
+    return;
+
+    $g2->g->{dbh}->do(q{
+      CREATE TABLE IF NOT EXISTS _debug AS
+      SELECT
+        0 AS src_pos,
+        json_extract(each.value, '$[0]') AS src_vertex,
+        0 AS dst_pos,
+        json_extract(each.value, '$[1]') AS dst_vertex
+      FROM
+        json_each(?) each
+    }, {}, $json->encode([ $subgraph->edges ]));
+
+    return;
+  }
 
   my $automata = Grammar::Graph2::Automata->new(
     base_graph => $g2,

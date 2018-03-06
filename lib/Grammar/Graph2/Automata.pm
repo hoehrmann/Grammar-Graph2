@@ -231,6 +231,9 @@ sub _shadow_subgraph_under_automaton {
     $self->base_graph->vp_run_list($base_id + $rowid, $combined);
   }
 
+  ###################################################################
+  # Edges between vertices for states and vertices for transitions
+
   my $sth_new_edges = $d->_dbh->prepare(q{
     SELECT
       rowid AS src,
@@ -263,6 +266,9 @@ sub _shadow_subgraph_under_automaton {
       $base_id + $row->[1],
     );
   }
+
+  ###################################################################
+  # Replacement start/final vertices
 
   my ($base_id2) = $d->_dbh->selectrow_array(q{
     SELECT MAX(rowid) FROM shadow_tree
