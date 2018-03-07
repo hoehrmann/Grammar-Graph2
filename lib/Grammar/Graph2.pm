@@ -114,11 +114,10 @@ sub _rw_vertex_attribute {
     }, $name, $self->g->{dbh}->quote($value),
               $self->g->{dbh}->quote($vertex)));
 
-    # TODO: change queries and then change this to use bools 
     if ($name eq 'type') {
-      my $is_push = ($value =~ /^(Start|If|If1|If2)$/) || undef;
-      my $is_pop = ($value =~ /^(Final|Fi|Fi1|Fi2)$/) || undef;
-      my $is_stack = ($is_push || $is_pop) || undef;
+      my $is_push = 0 + ($value =~ /^(Start|If|If1|If2)$/);
+      my $is_pop = 0 + ($value =~ /^(Final|Fi|Fi1|Fi2)$/);
+      my $is_stack = 0 + ($is_push || $is_pop);
       $self->g->{dbh}->do(q{
         UPDATE vertex_property
         SET is_stack = ?, is_push = ?, is_pop = ?

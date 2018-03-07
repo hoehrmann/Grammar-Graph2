@@ -792,7 +792,7 @@ sub _create_collapsed_to_stack_vertices {
         INNER JOIN vertex_property mid_p
           ON (mid_p.vertex = left_.dst_vertex)
     WHERE
-      mid_p.is_stack IS NULL
+      NOT(COALESCE(mid_p.is_stack, 0))
   )
   SELECT
     p.*
@@ -806,7 +806,8 @@ sub _create_collapsed_to_stack_vertices {
         ON (mid_src_p.vertex = p.mid_src_vertex)
   WHERE
     1 = 1
-    AND (src_p.is_stack AND dst_p.is_stack)
+    AND COALESCE(src_p.is_stack, 0)
+    AND COALESCE(dst_p.is_stack, 0)
     AND (
       COALESCE(NOT(src_p.is_push
         AND dst_p.is_pop

@@ -109,7 +109,7 @@ for my $dir (@dirs) {
     say "generating $out_path";
 
     open my $outref, '>', $out_path;
-    print $outref JSON->new->ascii->encode($ref);
+    print $outref JSON->new->canonical(1)->ascii(1)->encode($ref);
     close $outref;
 
   }
