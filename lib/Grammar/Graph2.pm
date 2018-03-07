@@ -171,14 +171,14 @@ sub from_grammar_graph {
   $dbh->do(q{
     CREATE TABLE vertex_property (
       vertex PRIMARY KEY,
-      type,
+      type NOT NULL DEFAULT 'empty',
       name,
       p1,
       p2,
       partner,
-      is_stack,
-      is_push,
-      is_pop,
+      is_stack NOT NULL DEFAULT 0,
+      is_push NOT NULL DEFAULT 0,
+      is_pop NOT NULL DEFAULT 0,
       run_list,
       shadows,
       shadow_edges,

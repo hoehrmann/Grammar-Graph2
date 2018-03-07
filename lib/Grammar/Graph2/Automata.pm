@@ -104,7 +104,7 @@ sub _shadow_subgraph_under_automaton {
       s.state_id AS src_state,
       NULL as run_list,
       NULL as dst_state,
-      'DFAState:' || s.state_id AS type,
+      printf('empty', s.state_id) AS type,
       json_group_array(json_array(
         CAST(e.src AS TEXT),
         CAST(e.dst AS TEXT)
