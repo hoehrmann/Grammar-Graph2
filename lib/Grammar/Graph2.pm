@@ -105,38 +105,26 @@ sub _rw_vertex_attribute {
 
     die if $name eq 'shadows' and defined $self->vp_shadows($value);
 
-    # TODO: this could be nicer
-
-    $self->g->{dbh}->do(sprintf(q{
-      INSERT OR IGNORE INTO vertex_property(vertex) VALUES(%s)
-    }, $self->g->{dbh}->quote($vertex)));
+    $self->g->{dbh}->do(q{
+      INSERT OR IGNORE INTO vertex_property(vertex) VALUES(?)
+    }, {}, $vertex);
 
     $self->g->{dbh}->do(sprintf(q{
       UPDATE vertex_property SET %s = %s WHERE vertex = %s
     }, $name, $self->g->{dbh}->quote($value),
               $self->g->{dbh}->quote($vertex)));
 
-    if ($name eq 'type' and $value =~ /^(Start|If|If1|If2)$/) {
-      $self->g->{dbh}->do(sprintf(q{
+    # TODO: change queries and then change this to use bools 
+    if ($name eq 'type') {
+      my $is_push = ($value =~ /^(Start|If|If1|If2)$/) || undef;
+      my $is_pop = ($value =~ /^(Final|Fi|Fi1|Fi2)$/) || undef;
+      my $is_stack = ($is_push || $is_pop) || undef;
+      $self->g->{dbh}->do(q{
         UPDATE vertex_property
-        SET is_stack = 1, is_push = 1, is_pop = NULL
-        WHERE vertex = %s
-      }, $self->g->{dbh}->quote($vertex)));
-
-    } elsif ($name eq 'type' and $value =~ /^(Final|Fi|Fi1|Fi2)$/) {
-      $self->g->{dbh}->do(sprintf(q{
-        UPDATE vertex_property
-        SET is_stack = 1, is_push = NULL, is_pop = 1
-        WHERE vertex = %s
-      }, $self->g->{dbh}->quote($vertex)));
-    } elsif ($name eq 'type') {
-      $self->g->{dbh}->do(sprintf(q{
-        UPDATE vertex_property
-        SET is_stack = NULL, is_pop = NULL, is_pop = NULL
-        WHERE vertex = %s
-      }, $self->g->{dbh}->quote($vertex)));
+        SET is_stack = ?, is_push = ?, is_pop = ?
+        WHERE vertex = ?
+      }, {}, $is_stack, $is_push, $is_pop, $vertex);
     }
-
   }
 
   return $old;
@@ -179,6 +167,8 @@ sub from_grammar_graph {
 
   my $dbh = $g->{dbh};
 
+  local $dbh->{sqlite_allow_multiple_statements} = 1;
+
   $dbh->do(q{
     CREATE TABLE vertex_property (
       vertex PRIMARY KEY,
@@ -196,7 +186,7 @@ sub from_grammar_graph {
       self_loop DEFAULT 'no',
       topo,
       epsilon_group
-    )
+    );
   });
 
   my $self = $class->new(
