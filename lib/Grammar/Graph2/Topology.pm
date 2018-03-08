@@ -375,12 +375,6 @@ sub _topo_epsilon {
     })
   );
 
-  my $scg = $d->strongly_connected_graph;
-  my $scgf = Graph::Feather->new(
-    vertices => [ $scg->vertices ],
-    edges => [ $scg->edges ],
-  );
-
   return _scg_topological_depth($d)
 }
 
