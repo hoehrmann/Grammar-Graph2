@@ -14,6 +14,7 @@ use Graph::SomeUtils qw/:all/;
 use Algorithm::ConstructDFA2;
 use Set::IntSpan;
 use YAML::XS;
+use Memoize;
 
 has 'alphabet' => (
   is       => 'ro',
@@ -50,6 +51,10 @@ sub subgraph_automaton {
   my $db_name = 'MATA-DFA.sqlite';
   unlink $db_name;
 
+  my $intspan_for_runlist = memoize(sub {
+    return Set::IntSpan->new(@_)
+  });
+
   my $d = Algorithm::ConstructDFA2->new(
 
     input_alphabet  => [ $self->alphabet->first_ords ],
@@ -64,9 +69,9 @@ sub subgraph_automaton {
     vertex_matches  => sub {
       my ($vertex, $input) = @_;
 
-      return Set::IntSpan
-        ->new($self->base_graph->vp_run_list($vertex))
-        ->member($input);
+      return $intspan_for_runlist->(
+        $self->base_graph->vp_run_list($vertex)
+      )->member($input);
     },
 
     storage_dsn     => "dbi:SQLite:dbname=$db_name",
@@ -319,10 +324,10 @@ sub _shadow_subgraph_under_automaton {
       AND src_state = ?
   });
 
-  my ($dfa_start_rowid) = $d->_dbh->selectrow_array(
-    $sth_rowid_for_state_id, {}, $start_id
-  );
-
+#  my ($dfa_start_rowid) = $d->_dbh->selectrow_array(
+#    $sth_rowid_for_state_id, {}, $start_id
+#  );
+#
 #  warn 'dfa_start_rowid undefined??' unless defined $dfa_start_rowid;
 #  $self->base_graph->g->add_edge($new_start_vertex,
 #    $base_id + $dfa_start_rowid) if defined $dfa_start_rowid;

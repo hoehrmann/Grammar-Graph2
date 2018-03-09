@@ -39,9 +39,10 @@ sub BUILD {
     map { Set::IntSpan->new($_) }
     uniq_by { $_ }
     grep { defined }
-    map {
-      $self->g->vp_run_list($_)
-    } $self->g->g->vertices;
+    map { @$_ }
+    $self->g->g->{dbh}->selectall_array(q{
+      SELECT DISTINCT run_list FROM vertex_property
+    });
 
   my $first = sub {
     my ($set) = @_;

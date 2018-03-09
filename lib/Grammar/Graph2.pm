@@ -11,6 +11,17 @@ has 'g' => (
   required => 1,
 );
 
+has '_dbh' => (
+  is       => 'ro',
+  writer   => '_set_dbh',
+);
+
+sub BUILD {
+  my ($self) = @_;
+  $self->_set_dbh( $self->g->{dbh} );
+}
+
+
 #####################################################################
 #
 #####################################################################
@@ -226,6 +237,9 @@ sub from_grammar_graph {
 
   unlink 'TEST.sqlite';
 #  $dbh->sqlite_backup_to_file('TEST.sqlite');
+
+  use Grammar::Graph2::Init;
+  $self->_init();
 
   return $self;
 }
