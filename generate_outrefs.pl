@@ -33,7 +33,7 @@ use Grammar::Graph2::TestCase;
 
 local $Storable::canonical = 1;
 
-my @dirs = <./data/reftests/xml2015-*>;
+my @dirs = <./data/reftests/*>;
 #my @dirs = <./data/reftests/*>;
 
 for my $dir (@dirs) {
@@ -109,7 +109,7 @@ for my $dir (@dirs) {
     say "generating $out_path";
 
     open my $outref, '>', $out_path;
-    print $outref JSON->new->canonical(1)->ascii(1)->encode($ref);
+    print $outref JSON->new->canonical(1)->ascii(1)->indent(1)->encode($ref);
     close $outref;
 
   }

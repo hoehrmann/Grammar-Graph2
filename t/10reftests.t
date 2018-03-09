@@ -79,6 +79,10 @@ for my $dir (sort @dirs) {
       $expected->{all_matches},
       $path_prefix . ' all_matches';
 
+    is_deeply $got->{grammar_self_loops},
+      $expected->{grammar_self_loops},
+      $path_prefix . ' grammar_self_loops';
+
   }
 }
 

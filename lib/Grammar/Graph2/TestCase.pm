@@ -109,7 +109,20 @@ sub parse_to_ref_data {
       } grep {
         defined
       } @all_matches
-    ]
+    ],
+    grammar_self_loops => $p->_dbh->selectall_arrayref(q{
+      SELECT 
+        name,
+        MIN(self_loop)
+      FROM
+        vertex_property
+      WHERE
+        type in ('Start', 'Final')
+        AND
+        name <> ''
+      GROUP BY
+        name
+    }),
   };
 }
 

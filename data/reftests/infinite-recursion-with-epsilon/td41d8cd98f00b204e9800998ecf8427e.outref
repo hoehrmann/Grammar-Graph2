@@ -1,1 +1,16 @@
-{"random_matches":[["",[["S",[["A",[],1,1]],1,1]],1,1],["",[["S",[["A",[["A",[],1,1]],1,1]],1,1]],1,1],["",[["S",[["A",[["A",[["A",[],1,1]],1,1]],1,1]],1,1]],1,1]],"parent_child_signature":[],"sibling_signature":[],"all_matches":[]}
+{
+   "all_matches":[],
+   "grammar_self_loops":[
+      [
+         "A",
+         "linear"
+      ],
+      [
+         "S",
+         "no"
+      ]
+   ],
+   "parent_child_signature":[],
+   "random_matches":[],
+   "sibling_signature":[]
+}

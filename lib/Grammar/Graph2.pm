@@ -63,8 +63,8 @@ sub is_postlude_vertex { vp_type(@_) eq 'Postlude' }
 
 sub is_terminal_vertex {
   is_input_vertex(@_) or
-  is_prelude_vertex(@_) or
-  is_postlude_vertex(@_) or
+#  is_prelude_vertex(@_) or
+#  is_postlude_vertex(@_) or
   0
 }
 

@@ -62,8 +62,6 @@ sub BUILD {
 sub create_t {
   my ($self) = @_;
 
-  $self->_create_vertex_spans();
-
   $self->_file_to_table();
 
   $self->_create_grammar_input_cross_product();
@@ -799,66 +797,6 @@ sub _create_trees_bottom_up {
 
   }
 }
-
-
-#####################################################################
-# ...
-#####################################################################
-
-#####################################################################
-# This stuff does not really belong here:
-#####################################################################
-
-sub _create_vertex_spans {
-  my ($self) = @_;
-
-  local $self->_dbh->{sqlite_allow_multiple_statements} = 1;
-
-  $self->_dbh->do(q{
-    DROP TABLE IF EXISTS vertex_span;
-
-    CREATE TABLE vertex_span(
-      vertex,
-      min INTEGER,
-      max INTEGER
-    );
-
-    CREATE INDEX idx_vertex_span_vertex
-      ON vertex_span(vertex)
-  });
-
-  my $span_insert_sth = $self->_dbh->prepare(q{
-    INSERT INTO vertex_span(vertex, min, max) VALUES (?, ?, ?)
-  });
-
-  for my $v ($self->g->g->vertices) {
-
-    my $type = $self->g->vp_type($v);
-
-
-    if ($self->g->is_terminal_vertex($v)) {
-      next if $type eq 'Prelude';
-      next if $type eq 'Postlude';
-
-      my $char_obj = Set::IntSpan->new(
-        $self->g->vp_run_list($v)
-      );
-
-#      $self->g->vp_type($v, 'Input');
-      die unless UNIVERSAL::can($char_obj, 'spans');
-      $self->_dbh->begin_work();
-      $span_insert_sth->execute($v, @$_)
-        for $char_obj->spans;
-      $self->_dbh->commit();
-    }
-  }
-
-}
-
-#####################################################################
-#
-#####################################################################
-
 
 1;
 

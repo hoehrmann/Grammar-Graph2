@@ -29,6 +29,9 @@ sub _init {
   );
 
   $self->_replace_conditionals();
+
+  $self->_create_vertex_spans();
+
   $self->_dbh->do(q{ ANALYZE });
 }
 
@@ -164,6 +167,56 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
   return 1;
 }
 
+#####################################################################
+# This stuff does not really belong here:
+#####################################################################
+
+sub _create_vertex_spans {
+  my ($self) = @_;
+
+  my $dbh = $self->g->{dbh};
+
+  local $dbh->{sqlite_allow_multiple_statements} = 1;
+
+  $dbh->do(q{
+    DROP TABLE IF EXISTS vertex_span;
+
+    CREATE TABLE vertex_span(
+      vertex,
+      min INTEGER,
+      max INTEGER
+    );
+
+    CREATE INDEX idx_vertex_span_vertex
+      ON vertex_span(vertex)
+  });
+
+  my $span_insert_sth = $dbh->prepare(q{
+    INSERT INTO vertex_span(vertex, min, max) VALUES (?, ?, ?)
+  });
+
+  for my $v ($self->g->vertices) {
+
+    my $type = $self->vp_type($v);
+
+    if ($self->is_terminal_vertex($v)) {
+      next if $type eq 'Prelude';
+      next if $type eq 'Postlude';
+
+      my $char_obj = Set::IntSpan->new(
+        $self->vp_run_list($v)
+      );
+
+#      $self->g->vp_type($v, 'Input');
+      die unless UNIVERSAL::can($char_obj, 'spans');
+      $dbh->begin_work();
+      $span_insert_sth->execute($v, @$_)
+        for $char_obj->spans;
+      $dbh->commit();
+    }
+  }
+
+}
 
 
 1;

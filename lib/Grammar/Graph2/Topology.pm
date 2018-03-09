@@ -192,7 +192,8 @@ sub BUILD {
     SELECT
       src_p.vertex AS vertex,
       CASE
-      WHEN (productive_loops.vertex IS NOT NULL) THEN 'irregular'
+      WHEN (src_productive.vertex IS NOT NULL)
+        AND (partner_productive.vertex IS NOT NULL) THEN 'irregular'
       WHEN (start_paradox.parent IS NOT NULL) THEN 'linear'
       WHEN (final_paradox.parent IS NOT NULL) THEN 'linear'
       ELSE 'no'
@@ -203,8 +204,10 @@ sub BUILD {
           ON (start_paradox.parent = src_p.vertex)
         LEFT JOIN view_paradoxical final_paradox
           ON (final_paradox.parent = src_p.partner)
-        LEFT JOIN view_productive_loops productive_loops
-          ON (productive_loops.vertex = src_p.vertex)
+        LEFT JOIN view_productive_loops src_productive
+          ON (src_productive.vertex = src_p.vertex)
+        LEFT JOIN view_productive_loops partner_productive
+          ON (partner_productive.vertex = src_p.partner)
 
     ;
 
