@@ -261,14 +261,38 @@ sub _add_self_loop_attributes {
     for @self_loop;
 }
 
+sub _strongly_connected_graph_feather {
+  my ($g) = @_;
+
+  my @sccs = $g->strongly_connected_components;
+
+  @$_ = sort @$_ for @sccs;
+
+  my %v_to_id;
+  my %h;
+  for (my $ix = 0; $ix < @sccs; ++$ix) {
+    $v_to_id{ $_ } = $ix + 1 for @{ $sccs[$ix] };
+    $h{ $ix + 1 } = $sccs[$ix];
+  }
+
+  my $scg2 = Graph::Feather->new(
+    vertices => [ map { join '+', @$_ } values %h ],
+    edges    => [ map {
+      [ map { join '+', @{ $h{ $v_to_id{$_} } } } @$_ ]
+    } $g->edges ],
+  );
+
+  $scg2->feather_delete_edges(
+    map { [ $_, $_ ] } $scg2->vertices
+  );
+
+  return $scg2;
+}
+
 sub _scg_topological_depth {
   my ($d) = @_;
 
-  my $scg = $d->strongly_connected_graph;
-  my $scgf = Graph::Feather->new(
-    vertices => [ $scg->vertices ],
-    edges => [ $scg->edges ],
-  );
+  my $scgf = _strongly_connected_graph_feather($d);
 
   my $result = $scgf->{dbh}->selectall_hashref(q{
     WITH RECURSIVE

@@ -323,8 +323,9 @@ sub _shadow_subgraph_under_automaton {
     $sth_rowid_for_state_id, {}, $start_id
   );
 
-  $self->base_graph->g->add_edge($new_start_vertex,
-    $base_id + $dfa_start_rowid);
+#  warn 'dfa_start_rowid undefined??' unless defined $dfa_start_rowid;
+#  $self->base_graph->g->add_edge($new_start_vertex,
+#    $base_id + $dfa_start_rowid) if defined $dfa_start_rowid;
 
   for my $state_id (@$accepting) {
     my ($dfa_rowid) = $d->_dbh->selectrow_array(
@@ -340,20 +341,11 @@ sub _shadow_subgraph_under_automaton {
       $new_final_vertex);
   }
 
-# UNEXPECTED
-$self->base_graph->g->delete_edges( graph_edges_between($self->base_graph->g, $start_vertex, $final_vertex) );
-
-  $self->base_graph->g->delete_edges( 
-    map {
-      $subgraph->edges_at($_)
-    } grep { 
-      $_ ne $start_vertex and $_ ne $final_vertex
-    } $subgraph->vertices
-  ) if 1;
-
-#  $self->base_graph->g->delete_edges(map {
-#    $self->base_graph->g->edges_at($_)
-#  } $subgraph->vertices);
+  $self->base_graph->g->feather_delete_edges(
+    grep { not grep {
+      $_ eq $start_vertex or $_ eq $final_vertex
+    } @$_ } $subgraph->edges
+  );
 
   $d->_dbh->rollback();
 }
