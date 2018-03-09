@@ -5,6 +5,7 @@ use 5.024000;
 use Moo;
 use Graph::Feather;
 use Graph::Directed;
+use Grammar::Graph2::Init;
 
 has 'g' => (
   is       => 'ro',
@@ -20,7 +21,6 @@ sub BUILD {
   my ($self) = @_;
   $self->_set_dbh( $self->g->{dbh} );
 }
-
 
 #####################################################################
 #
@@ -181,7 +181,7 @@ sub from_grammar_graph {
 
   $dbh->do(q{
     CREATE TABLE vertex_property (
-      vertex PRIMARY KEY,
+      vertex PRIMARY KEY UNIQUE NOT NULL,
       type NOT NULL DEFAULT 'empty',
       name,
       p1,
@@ -238,7 +238,6 @@ sub from_grammar_graph {
   unlink 'TEST.sqlite';
 #  $dbh->sqlite_backup_to_file('TEST.sqlite');
 
-  use Grammar::Graph2::Init;
   $self->_init();
 
   return $self;

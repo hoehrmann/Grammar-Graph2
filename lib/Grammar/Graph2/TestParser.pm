@@ -430,54 +430,6 @@ sub _update_shadowed_result {
 
 }
 
-
-sub _create_without_unreachable_vertices_new {
-  my ($self) = @_;
-
-  $self->_dbh->do(q{
-    DROP TABLE IF EXISTS result
-  });
-
-q{
-
-WITH
-adjunct(vertex, adjunct) AS (
-  SELECT
-    vertex,
-    scc.value
-  FROM
-    vertex_property vp
-      INNER JOIN json_each(vp.epsilon_group) scc
-)
-SELECT DISTINCT
-  src_pos,
-  src_each.adjunct AS src_vertex,
-  dst_pos,
-  dst_each.adjunct AS dst_vertex
-FROM
-  testparser_all_edges ta
-    INNER JOIN vertex_property src_p
-      ON (src_p.vertex = ta.src_vertex)
-    INNER JOIN vertex_property dst_p
-      ON (dst_p.vertex = ta.dst_vertex)
-    INNER JOIN adjunct src_each
-      ON (src_each.vertex = src_p.vertex)
-    INNER JOIN adjunct dst_each
-      ON (dst_each.vertex = dst_p.vertex)
-ORDER BY
-  src_pos,
-  src_p.topo,
-  dst_pos,
-  dst_p.topo
-
-
-    
-
-};
-
-  # ...
-}
-
 sub _create_without_unreachable_vertices {
   my ($self) = @_;
 
@@ -860,19 +812,17 @@ sub _create_trees_bottom_up {
 sub _create_vertex_spans {
   my ($self) = @_;
 
-  $self->_dbh->do(q{
-    DROP TABLE IF EXISTS vertex_span
-  });
+  local $self->_dbh->{sqlite_allow_multiple_statements} = 1;
 
   $self->_dbh->do(q{
+    DROP TABLE IF EXISTS vertex_span;
+
     CREATE TABLE vertex_span(
       vertex,
       min INTEGER,
       max INTEGER
     );
-  });
 
-  $self->_dbh->do(q{
     CREATE INDEX idx_vertex_span_vertex
       ON vertex_span(vertex)
   });
@@ -941,4 +891,36 @@ __END__
       shadow_edges = json_remove(shadow_edges, ...)
       
   };
+
+...
+
+WITH
+adjunct(vertex, adjunct) AS (
+  SELECT
+    vertex,
+    scc.value
+  FROM
+    vertex_property vp
+      INNER JOIN json_each(vp.epsilon_group) scc
+)
+SELECT DISTINCT
+  src_pos,
+  src_each.adjunct AS src_vertex,
+  dst_pos,
+  dst_each.adjunct AS dst_vertex
+FROM
+  testparser_all_edges ta
+    INNER JOIN vertex_property src_p
+      ON (src_p.vertex = ta.src_vertex)
+    INNER JOIN vertex_property dst_p
+      ON (dst_p.vertex = ta.dst_vertex)
+    INNER JOIN adjunct src_each
+      ON (src_each.vertex = src_p.vertex)
+    INNER JOIN adjunct dst_each
+      ON (dst_each.vertex = dst_p.vertex)
+ORDER BY
+  src_pos,
+  src_p.topo,
+  dst_pos,
+  dst_p.topo
 
