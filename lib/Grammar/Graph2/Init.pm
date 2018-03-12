@@ -14,9 +14,8 @@ use Graph::Directed;
 use Graph::SomeUtils qw/:all/;
 use Grammar::Graph2;
 use Grammar::Graph2::TestParser::MatchEnumerator;
-#use Grammar::Graph2::Automata;
 use Grammar::Graph2::Topology;
-use Grammar::Graph2::Automata2;
+use Grammar::Graph2::Automata;
 
 sub _init {
   my ($self) = @_;
@@ -249,7 +248,7 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
     return;
   }
 
-  my $automata = Grammar::Graph2::Automata2->new(
+  my $automata = Grammar::Graph2::Automata->new(
     base_graph => $g2,
   );
 
