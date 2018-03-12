@@ -81,7 +81,9 @@ for my $dir (sort @dirs) {
 
     is_deeply $got->{grammar_self_loops},
       $expected->{grammar_self_loops},
-      $path_prefix . ' grammar_self_loops';
+      $path_prefix . ' grammar_self_loops' or diag(
+        Dump $got->{grammar_self_loops}
+      );
 
   }
 }

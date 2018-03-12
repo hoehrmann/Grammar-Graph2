@@ -243,14 +243,125 @@ sub BUILD {
       all_e_successors_and_self
     ;
 
+    -----------------------------------------------------------------
+    -- view_next_stack
+    -----------------------------------------------------------------
+
+    DROP VIEW IF EXISTS view_next_stack;
+
+    CREATE VIEW view_next_stack AS
+    WITH RECURSIVE
+    stop_vertex(vertex) AS (
+      SELECT
+        vertex
+      FROM
+        vertex_property
+      WHERE
+        type IN (
+          'If1', 'If2', 'Fi1', 'Fi2',
+          'If', 'Fi', 'Prelude', 'Postlude')
+        OR
+        self_loop <> 'no' -- TODO: 'irregular'?
+        OR
+        vertex IN (SELECT attribute_value
+                   FROM graph_attribute
+                   WHERE attribute_name
+                     IN ('start_vertex', 'final_vertex'))
+    ),
+    successors_and_self(origin, v) AS (
+
+      SELECT vertex AS origin, vertex AS v FROM vertex_property
+
+      UNION
+
+      SELECT
+        r.origin,
+        Edge.dst
+      FROM
+        Edge
+          INNER JOIN successors_and_self AS r
+            ON (Edge.src = r.v)
+          INNER JOIN vertex_property AS src_p
+            ON (Edge.src = src_p.vertex)
+      WHERE
+        src_p.vertex NOT IN (SELECT * FROM stop_vertex)
+    )
+    SELECT
+      origin AS vertex,
+      v AS next_stack
+    FROM
+      successors_and_self
+    WHERE
+      v IN (SELECT * FROM stop_vertex)
+    ORDER BY
+      origin,
+      v
+    ;
+
+
   });
 
   $self->_add_self_loop_attributes();
   $self->_add_topological_attributes();
+#  $self->_add_stack_group_attributes();
   $self->_dbh->do(q{ ANALYZE });
 }
 
 local $Storable::canonical = 1;
+
+=pod
+
+sub _add_stack_group_attributes {
+  my ($self) = @_;
+
+  my $json = JSON->new->canonical(1)->indent(0)->ascii(1);
+
+  my $dbh = ...;
+
+  $dbh->begin_work();
+
+  $dbh->sqlite_create_function('_json_sorted_uniq_array', 1, sub {
+    my ($tmp) = @_;
+    return $json->encode([
+      sort { $a cmp $b } uniq @{ $json->decode($tmp) }
+    ]);
+  });
+
+  $dbh->do(q{
+    DROP TABLE IF EXISTS XXX1;
+    
+    CREATE TABLE XXX1 AS
+    SELECT
+      vertex,
+      _json_sorted_uniq_array(json_group_array(next_stack)) AS ...g
+    FROM 
+      view_next_stack
+    GROUP BY
+      vertex
+    ;
+
+    CREATE TABLE XXX2 AS SELECT DISTINCT ...g FROM XXX1;
+
+  });
+
+  my @stack_group = $self->_dbh->selectall_array(q{
+    SELECT
+      XXX2.rowid
+    FROM
+      XXX1
+        INNER JOIN XXX2
+          ON (XXX1....g = XXX2....g)
+  });
+
+  $self->g->vp_stack_group(@$_)
+    for @stack_group;
+  
+  $dbh->sqlite_create_function('_json_sorted_uniq_array', 1, undef);
+
+  $dbh->rollback();
+}
+
+=cut
 
 sub _add_self_loop_attributes {
   my ($self) = @_;
@@ -273,20 +384,23 @@ sub _strongly_connected_graph_feather {
 
   my %v_to_id;
   my %h;
+  
   for (my $ix = 0; $ix < @sccs; ++$ix) {
-    $v_to_id{ $_ } = $ix + 1 for @{ $sccs[$ix] };
-    $h{ $ix + 1 } = $sccs[$ix];
+    $v_to_id{ $_ } = $ix for @{ $sccs[$ix] };
+    $h{ $ix } = $sccs[$ix];
   }
 
   my $scg2 = Graph::Feather->new(
     vertices => [ map { join '+', @$_ } values %h ],
-    edges    => [ map {
-      [ map { join '+', @{ $h{ $v_to_id{$_} } } } @$_ ]
-    } $g->edges ],
-  );
-
-  $scg2->feather_delete_edges(
-    map { [ $_, $_ ] } $scg2->vertices
+    edges    => [
+      grep {
+        $_->[0] ne $_->[1]
+      }
+      map {
+        [ map { join '+', @{ $h{ $v_to_id{$_} } } } @$_ ]
+      }
+      $g->edges
+    ],
   );
 
   return $scg2;
@@ -420,8 +534,10 @@ sub _add_topological_attributes {
 
   for ($self->g->g->vertices) {
     warn $_ unless defined $t1->{$_}{vertex};
+    my @vertices = split/\+/, $t1->{$_}{vertex};
+    next if @vertices == 1;
     $self->g->vp_epsilon_group($_,
-      $json->encode([ split/\+/, $t1->{$_}{vertex}])
+      $json->encode([ @vertices ])
     );
   }
 

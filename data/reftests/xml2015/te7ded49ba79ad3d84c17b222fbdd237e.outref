@@ -318,10 +318,6 @@
          "irregular"
       ],
       [
-         "conditionalSect",
-         "no"
-      ],
-      [
          "content",
          "irregular"
       ],
@@ -347,10 +343,6 @@
       ],
       [
          "elementdecl",
-         "no"
-      ],
-      [
-         "extSubsetDecl",
          "no"
       ],
       [

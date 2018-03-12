@@ -122,6 +122,8 @@ sub parse_to_ref_data {
         name <> ''
       GROUP BY
         name
+      ORDER BY
+        name
     }),
   };
 }

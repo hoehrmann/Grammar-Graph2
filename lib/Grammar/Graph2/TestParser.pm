@@ -275,6 +275,9 @@ sub _update_shadowed_testparser_all_edges {
 
 #return;
 
+=pod
+
+
   $self->_dbh->do(q{
     UPDATE OR REPLACE
       testparser_all_edges 
@@ -311,6 +314,8 @@ sub _update_shadowed_testparser_all_edges {
 
 # return;
 
+=cut
+
   $self->_dbh->do(q{
 
     INSERT OR IGNORE INTO testparser_all_edges(src_pos,
@@ -327,24 +332,79 @@ sub _update_shadowed_testparser_all_edges {
       testparser_all_edges a
         INNER JOIN vertex_property src_p
           ON (a.src_vertex = src_p.vertex
-            -- AND src_p.shadow_edges IS NOT NULL
+            -- AND src_p.shadowed_edges IS NOT NULL
             )
-        INNER JOIN json_each(src_p.shadow_edges) each
+        INNER JOIN json_each(src_p.shadowed_edges) each
           ON (1)
   });
+
+  $self->_dbh->do(q{
+    UPDATE OR REPLACE testparser_all_edges SET src_vertex = COALESCE((SELECT vertex FROM vertex_property vp WHERE vp.shadowed_by = testparser_all_edges.src_vertex), src_vertex);
+  }) if 1;
+
+  $self->_dbh->do(q{
+    UPDATE OR REPLACE testparser_all_edges SET dst_vertex = COALESCE((SELECT vertex FROM vertex_property vp WHERE vp.shadowed_by = testparser_all_edges.dst_vertex), dst_vertex);
+  }) if 1;
+
+
+  $self->_dbh->do(q{
+
+    INSERT OR IGNORE INTO testparser_all_edges(src_pos,
+      src_vertex, dst_pos, dst_vertex)
+    SELECT
+      src_pos,
+      COALESCE(src_vertex, src_by.vertex),
+      dst_pos,
+      COALESCE(dst_vertex, dst_by.vertex)
+    FROM
+      testparser_all_edges a
+        INNER JOIN vertex_property src_p
+          ON (a.src_vertex = src_p.vertex)
+        INNER JOIN vertex_property dst_p
+          ON (a.src_vertex = dst_p.vertex)
+        LEFT JOIN vertex_property src_by
+          ON (src_by.vertex = src_p.shadowed_by)
+        LEFT JOIN vertex_property dst_by
+          ON (dst_by.vertex = dst_p.shadowed_by)
+    WHERE
+      src_by.vertex IS NOT NULL
+      OR 
+      dst_by.vertex IS NOT NULL 
+  }) if 0;
+
+  $self->_dbh->do(q{
+    DELETE FROM testparser_all_edges
+    WHERE
+      src_vertex IN (SELECT vertex FROM vertex_property WHERE type = 'If')
+      AND
+      dst_vertex NOT IN (SELECT vertex FROM vertex_property WHERE type = 'If1' OR type = 'If2')
+  });
+
+  # TODO: IMPORTANT. Why haps?
+  $self->_dbh->do(q{
+    DELETE FROM testparser_all_edges
+    WHERE
+      src_vertex IN (SELECT vertex FROM vertex_property WHERE type = 'Input')
+      AND
+      src_pos = dst_pos
+  });
+
+=pod
 
   $self->_dbh->do(q{
     DELETE FROM testparser_all_edges
     WHERE
       EXISTS (SELECT 1
               FROM vertex_property p
-              WHERE p.shadow_edges IS NOT NULL
+              WHERE p.shadowed_edges IS NOT NULL
                 AND (
                   testparser_all_edges.dst_vertex = p.vertex
                   OR
                   testparser_all_edges.src_vertex = p.vertex
                 ))
   });
+
+=cut
 
 }
 
@@ -407,9 +467,9 @@ sub _update_shadowed_result {
       result a
         INNER JOIN vertex_property src_p
           ON (a.src_vertex = src_p.vertex
-            -- AND src_p.shadow_edges IS NOT NULL
+            -- AND src_p.shadowed_edges IS NOT NULL
             )
-        INNER JOIN json_each(src_p.shadow_edges) each
+        INNER JOIN json_each(src_p.shadowed_edges) each
           ON (1)
   });
 
@@ -418,7 +478,7 @@ sub _update_shadowed_result {
     WHERE
       EXISTS (SELECT 1
               FROM vertex_property p
-              WHERE p.shadow_edges IS NOT NULL
+              WHERE p.shadowed_edges IS NOT NULL
                 AND (
                   result.dst_vertex = p.vertex
                   OR
@@ -811,9 +871,9 @@ __END__
       FROM
         vertex_property vertex_p
           INNER JOIN
-            json_each(vertex_p.shadow_edges) each1
+            json_each(vertex_p.shadowed_edges) each1
           INNER JOIN
-            json_each(vertex_p.shadow_edges) each2
+            json_each(vertex_p.shadowed_edges) each2
       WHERE
         json_extract(each1.value, '$[0]') = ?
         AND
@@ -826,7 +886,7 @@ __END__
     UPDATE
       vertex_property
     SET
-      shadow_edges = json_remove(shadow_edges, ...)
+      shadowed_edges = json_remove(shadowed_edges, ...)
       
   };
 

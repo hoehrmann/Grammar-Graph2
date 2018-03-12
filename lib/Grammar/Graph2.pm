@@ -33,17 +33,18 @@ sub gp_final_vertex { _rw_graph_attribute('final_vertex', @_) }
 #
 #####################################################################
 
-sub vp_type          { _rw_vertex_attribute('type',    @_) // '' }
-sub vp_name          { _rw_vertex_attribute('name',          @_) }
-sub vp_p1            { _rw_vertex_attribute('p1',            @_) }
-sub vp_p2            { _rw_vertex_attribute('p2',            @_) }
-sub vp_partner       { _rw_vertex_attribute('partner',       @_) }
-sub vp_run_list      { _rw_vertex_attribute('run_list',      @_) }
-sub vp_shadows       { _rw_vertex_attribute('shadows',       @_) }
-sub vp_shadow_edges  { _rw_vertex_attribute('shadow_edges',  @_) }
-sub vp_self_loop     { _rw_vertex_attribute('self_loop',     @_) }
-sub vp_topo          { _rw_vertex_attribute('topo',          @_) }
-sub vp_epsilon_group { _rw_vertex_attribute('epsilon_group', @_) }
+sub vp_type           { _rw_vertex_attribute('type',    @_) // '' }
+sub vp_name           { _rw_vertex_attribute('name',          @_) }
+sub vp_p1             { _rw_vertex_attribute('p1',            @_) }
+sub vp_p2             { _rw_vertex_attribute('p2',            @_) }
+sub vp_partner        { _rw_vertex_attribute('partner',       @_) }
+sub vp_run_list       { _rw_vertex_attribute('run_list',      @_) }
+sub vp_shadowed_by    { _rw_vertex_attribute('shadowed_by',   @_) }
+sub vp_shadowed_edges { _rw_vertex_attribute('shadowed_edges',  @_) }
+sub vp_self_loop      { _rw_vertex_attribute('self_loop',     @_) }
+sub vp_topo           { _rw_vertex_attribute('topo',          @_) }
+sub vp_epsilon_group  { _rw_vertex_attribute('epsilon_group', @_) }
+sub vp_stack_group    { _rw_vertex_attribute('stack_group',   @_) }
 
 #####################################################################
 #
@@ -114,7 +115,7 @@ sub _rw_vertex_attribute {
 
   if (@_ > 3) {
 
-    die if $name eq 'shadows' and defined $self->vp_shadows($value);
+#    die if $name eq 'shadows' and defined $self->vp_shadows($value);
 
     $self->g->{dbh}->do(q{
       INSERT OR IGNORE INTO vertex_property(vertex) VALUES(?)
@@ -126,6 +127,8 @@ sub _rw_vertex_attribute {
               $self->g->{dbh}->quote($vertex)));
 
     if ($name eq 'type') {
+      use Carp;
+      confess unless length $value;
       my $is_push = 0 + ($value =~ /^(Start|If|If1|If2)$/);
       my $is_pop = 0 + ($value =~ /^(Final|Fi|Fi1|Fi2)$/);
       my $is_stack = 0 + ($is_push || $is_pop);
@@ -192,10 +195,12 @@ sub from_grammar_graph {
       is_pop NOT NULL DEFAULT 0,
       run_list,
       shadows,
-      shadow_edges,
+      shadowed_by,
+      shadowed_edges,
       self_loop DEFAULT 'no',
       topo,
-      epsilon_group
+      epsilon_group,
+      stack_group
     );
   });
 

@@ -34,6 +34,14 @@ has '_log' => (
   },
 );
 
+has '_json' => (
+  is       => 'ro',
+  required => 0,
+  default  => sub {
+    JSON->new->canonical(1)->ascii(1)->indent(0)
+  },
+);
+
 sub BUILD {
   my ($self) = @_;
 
@@ -95,7 +103,20 @@ sub _shadow_subgraph_under_automaton {
     SELECT 1 + MAX(0 + vertex_name) FROM Vertex;
   });
 
-  my $next_vertex = $base_id;
+  ###################################################################
+  # Replacement start/final vertices
+
+  my $new_start_vertex = ++$base_id;
+  my $new_final_vertex = ++$base_id;
+
+  $self->base_graph->vp_shadows($new_start_vertex, $start_vertex);
+  $self->base_graph->vp_shadows($new_final_vertex, $final_vertex);
+
+  $self->base_graph->vp_type($new_start_vertex, 'new_start');
+  $self->base_graph->vp_type($new_final_vertex, 'new_final');
+
+  ###################################################################
+  # ...
 
   $d->_dbh->begin_work();
 
@@ -167,9 +188,9 @@ sub _shadow_subgraph_under_automaton {
 
   $sth_new_vertices->execute();
 
-  my $json = JSON->new->canonical(1)->ascii(1)->indent(0);
-
   my $cleanup_shadow_edges = sub {
+
+    # DO THIS PROJECTION EARLIER EG AS PART OF QUERY ABOVE
 
     my @edges = @_;
     my @result;
@@ -195,7 +216,7 @@ sub _shadow_subgraph_under_automaton {
       my $dst_shadows = $self->base_graph->vp_shadow_edges($dst);
 
       if (defined $src_shadows) {
-        push @result, @{ $json->decode( $src_shadows ) };
+        push @result, @{ $self->_json->decode( $src_shadows ) };
         next;
       }
       
@@ -215,21 +236,21 @@ sub _shadow_subgraph_under_automaton {
     my ($rowid, $src_state, $run_list, $dst_state, $type, $shadow_edges) =
       @$row;
 
-    $shadow_edges = $json->encode([
-      $cleanup_shadow_edges->(@{ $json->decode($shadow_edges) })
+    $shadow_edges = $self->_json->encode([
+      $cleanup_shadow_edges->(@{ $self->_json->decode($shadow_edges) })
     ]);
 
     $self->base_graph->vp_type($base_id + $rowid, $type);
     $self->base_graph->vp_shadow_edges($base_id + $rowid, $shadow_edges);
     next unless $run_list;
 
-    my $items = $json->decode( $run_list );
+    my $items = $self->_json->decode( $run_list );
 
     my @run_lists = uniq(map {
       $self->alphabet->_ord_to_list->{ $_ }
     } uniq( @$items ));
 
-    my $encoded = $json->encode(\@run_lists);
+    my $encoded = $self->_json->encode(\@run_lists);
     $cache{ $encoded } //= Set::IntSpan->new(@run_lists);
     my $combined = $cache{ $encoded };
 
@@ -237,7 +258,7 @@ sub _shadow_subgraph_under_automaton {
   }
 
   ###################################################################
-  # Edges between vertices for states and vertices for transitions
+  # Edges between (vertices for states) and (vertices for transitions)
 
   my $sth_new_edges = $d->_dbh->prepare(q{
     SELECT
@@ -273,46 +294,20 @@ sub _shadow_subgraph_under_automaton {
   }
 
   ###################################################################
-  # Replacement start/final vertices
+  # Add start_vertex edges from outside subgraph
 
-  my ($base_id2) = $d->_dbh->selectrow_array(q{
-    SELECT MAX(rowid) FROM shadow_tree
-  });
-
-  $base_id2 += $base_id;
-
-  my $new_start_vertex = $base_id2 + 1;
-  my $new_final_vertex = $base_id2 + 2;
-
-  $self->base_graph->vp_shadows($new_start_vertex, $start_vertex);
-  $self->base_graph->vp_shadows($new_final_vertex, $final_vertex);
-
-  $self->base_graph->vp_type($new_start_vertex, '');
-  $self->base_graph->vp_type($new_final_vertex, '');
+  $self->base_graph->g->add_edges(
+    map { [ $_->[0], $new_start_vertex ] }
+      $self->base_graph->g->edges_to($start_vertex)
+  );
 
   ###################################################################
-  # Move start_vertex edges from outside subgraph
+  # Add final_vertex edges from outside subgraph
 
-  my @incoming = grep { not $subgraph->has_vertex($_) }
-    $self->base_graph->g->predecessors($start_vertex);
-
-  $self->base_graph->g->add_edge($_, $new_start_vertex)
-    for @incoming;
-
-  $self->base_graph->g->delete_edge($_, $start_vertex)
-    for @incoming;
-
-  ###################################################################
-  # Move final_vertex edges from outside subgraph
-
-  my @outgoing = grep { not $subgraph->has_vertex($_) }
-    $self->base_graph->g->successors($final_vertex);
-
-  $self->base_graph->g->add_edge($new_final_vertex, $_)
-    for @outgoing;
-
-  $self->base_graph->g->delete_edge($final_vertex, $_)
-    for @outgoing;
+  $self->base_graph->g->add_edges(
+    map { [ $new_final_vertex, $_->[1] ] }
+      $self->base_graph->g->edges_from($final_vertex)
+  );
 
   ###################################################################
   # Connect DFA vertices
@@ -324,13 +319,13 @@ sub _shadow_subgraph_under_automaton {
       AND src_state = ?
   });
 
-#  my ($dfa_start_rowid) = $d->_dbh->selectrow_array(
-#    $sth_rowid_for_state_id, {}, $start_id
-#  );
-#
-#  warn 'dfa_start_rowid undefined??' unless defined $dfa_start_rowid;
-#  $self->base_graph->g->add_edge($new_start_vertex,
-#    $base_id + $dfa_start_rowid) if defined $dfa_start_rowid;
+  my ($dfa_start_rowid) = $d->_dbh->selectrow_array(
+    $sth_rowid_for_state_id, {}, $start_id
+  );
+
+  warn 'dfa_start_rowid undefined??' unless defined $dfa_start_rowid;
+  $self->base_graph->g->add_edge($new_start_vertex,
+    $base_id + $dfa_start_rowid) if defined $dfa_start_rowid;
 
   for my $state_id (@$accepting) {
     my ($dfa_rowid) = $d->_dbh->selectrow_array(
@@ -346,34 +341,75 @@ sub _shadow_subgraph_under_automaton {
       $new_final_vertex);
   }
 
+  # FIXME: shouldn't this remove edges *FROM* start_vertex?
+  # other edges are not necessarily between. If changed, is
+  # a corresponding change needed elsewhere?
+
+  $self->base_graph->g->feather_delete_edges(
+    $self->base_graph->g->edges_to($start_vertex)
+  );
+
   $self->base_graph->g->feather_delete_edges(
     grep { not grep {
       $_ eq $start_vertex or $_ eq $final_vertex
     } @$_ } $subgraph->edges
-  );
+  ) if 0;
 
   $d->_dbh->rollback();
 }
 
-sub _shadow_subgraph_under_automaton_old {
+sub _shadow_subgraph_under_automaton_oldest {
   my ($self, $subgraph, $d, $start_vertex, $final_vertex, $start_id, $accepting) = @_;
+
+  my @old_edges_to_start = $self->base_graph->g->edges_to($start_vertex);
+  my @old_edges_from_final = $self->base_graph->g->edges_from($final_vertex);
+  my %is_accepting = map { $_ => 1 } @$accepting;
 
   my ($base_id) = $self->base_graph->g->{dbh}->selectrow_array(q{
     SELECT 1 + MAX(0 + vertex_name) FROM Vertex;
   });
 
+  $d->_dbh->begin_work();
+
+  $d->_dbh->do(q{
+    CREATE TEMPORARY TABLE TConfiguration AS
+    SELECT * FROM Configuration
+    ORDER BY state, vertex
+  });
+
   my $sth_config = $d->_dbh->prepare(q{
-    SELECT rowid, state, vertex FROM Configuration
+    SELECT rowid, state, vertex FROM TConfiguration
   });
 
   $sth_config->execute();
   while (my ($id, $s, $v) = $sth_config->fetchrow_array) {
     _copy_to_indirect($self->base_graph, $subgraph, $v, $base_id + $id);
+    
+    if ($s eq $start_id and $v eq $start_vertex) {
+      $self->base_graph->vp_name($base_id + $id, $self->base_graph->vp_name($v));
+      $self->base_graph->g->add_edge($_, $base_id + $id)
+        for $self->base_graph->g->predecessors($start_vertex);
+    }
+
+    if ($is_accepting{$s} and $v eq $final_vertex) {
+      $self->base_graph->vp_name($base_id + $id, 'Final' . $self->base_graph->vp_name($v));
+      $self->base_graph->g->add_edge($base_id + $id, $_)
+        for $self->base_graph->g->successors($final_vertex);
+    }
   }
 
   my $sth_pairs = $d->_dbh->prepare(q{
-    SELECT src_id, dst_id
-    FROM view_transitions_as_configuration_pair
+    SELECT
+      c1.rowid AS src_id,
+      c2.rowid AS dst_id
+    FROM
+      view_transitions_as_5tuples t
+        INNER JOIN TConfiguration c1
+          ON (c1.state = t.src_state
+            AND c1.vertex = t.src_vertex)
+        INNER JOIN TConfiguration c2
+          ON (c2.state = t.dst_state
+            AND c2.vertex = t.dst_vertex);
   });
 
   $sth_pairs->execute();
@@ -381,15 +417,14 @@ sub _shadow_subgraph_under_automaton_old {
     $self->base_graph->g->add_edge($src + $base_id, $dst + $base_id);
   }
 
-#  $self->base_graph->g->delete_edges($subgraph->edges);
-  $self->base_graph->g->delete_edges(map {
-    $self->base_graph->g->edges_at($_)
-  } $subgraph->vertices);
+  $self->base_graph->g->feather_delete_edges(
+#    $subgraph->edges,
+    @old_edges_to_start,
+#    @old_edges_from_final,
+  );
 
-  # TODO: unclear why this did not have to return anything
-  # Theory: _copy_to_indirect did too much
-  # NOTE: _copy_to_indirect now filters out edges in subgraph
-  # That's a bit more than it used to do
+  $d->_dbh->rollback();
+
   return (undef, undef);
 }
 
@@ -404,12 +439,19 @@ sub _copy_to_indirect {
     $g2->vp_run_list($id, $g2->vp_run_list($v));
 
   } else {
-    $g2->vp_type($id, '');
+    $g2->vp_type($id, 'empty');
+    $g2->vp_name($id, $g2->vp_name($v) // $g2->vp_type($v) // '');
     $g2->vp_shadows($id, $g2->vp_shadows($v) // $v);
   }
 
-  $g2->g->add_edge($id, $_) for grep { not $subgraph->has_edge($v, $_) } $g2->g->successors($v);
-  $g2->g->add_edge($_, $id) for grep { not $subgraph->has_edge($_, $v) } $g2->g->predecessors($v);
+return;
+
+  $g2->g->add_edge($id, $_) for
+    grep { not $subgraph->has_edge($v, $_) }
+    $g2->g->successors($v);
+  $g2->g->add_edge($_, $id) for
+    grep { not $subgraph->has_edge($_, $v) }
+    $g2->g->predecessors($v);
 
 }
 
@@ -417,4 +459,28 @@ sub _copy_to_indirect {
 
 __END__
 
+
+=pod
+
+  my ($json_shadows) = $self->base_graph->g->{dbh}->selectrow_array(q{
+    SELECT
+      json_group_array(
+        json_array(vertex, COALESCE(shadows, vertex))
+      )
+    FROM
+      vertex_property
+    GROUP BY
+      NULL
+  });
+
+  $d->_dbh->do(q{
+    CREATE TABLE shadows AS
+    SELECT
+      json_extract(value, '$[0]') AS vertex,
+      json_extract(value, '$[1]') AS shadows,
+    FROM
+      json_each(?)
+  }, {}, $json_shadows);
+
+=cut
 

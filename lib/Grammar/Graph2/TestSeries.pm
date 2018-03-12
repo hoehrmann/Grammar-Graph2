@@ -133,8 +133,8 @@ die unless defined $jet;
   $g->fa_merge_character_classes();
 #  $g->fa_separate_character_classes();
 
-  $g->fa_expand_references();
   $g->fa_remove_useless_epsilons($g->g->vertices);
+  $g->fa_expand_references();
   $g->fa_truncate();
 
   my $g2 = Grammar::Graph2->from_grammar_graph($g);
