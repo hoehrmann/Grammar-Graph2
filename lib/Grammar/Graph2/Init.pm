@@ -89,6 +89,7 @@ sub _init {
   });
 
   $self->_replace_conditionals();
+  $self->_log->debug('done _replace_conditionals');
 
   $self->_dbh->do(q{
     UPDATE
@@ -144,6 +145,7 @@ use YAML::XS;
 =cut
 
   $self->_create_vertex_spans();
+  $self->_log->debug('done creating spans');
 
   $self->_dbh->do(q{ ANALYZE });
 }

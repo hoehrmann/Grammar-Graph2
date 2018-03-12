@@ -17,6 +17,14 @@ has '_dbh' => (
   writer   => '_set_dbh',
 );
 
+has '_log' => (
+  is       => 'rw',
+  required => 0,
+  default  => sub {
+    Log::Any->get_logger()
+  },
+);
+
 sub BUILD {
   my ($self) = @_;
   $self->_set_dbh( $self->g->{dbh} );
