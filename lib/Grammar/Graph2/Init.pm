@@ -100,20 +100,17 @@ sub _init {
                         WHERE v.vertex = vertex_property.vertex)
   });
 
-  my @replace = grep {
-    defined $self->vp_shadowed_by($_->[0]) 
-    or
-    defined $self->vp_shadowed_by($_->[1])
-  } $self->g->edges;
+  my @new_edges;
+  for ($self->g->edges) {
+    for my $src ($self->shadowed_by_or_self($_->[0])) {
+      for my $dst ($self->shadowed_by_or_self($_->[1])) {
+        push @new_edges, [ $src, $dst ];
+      }
+    }
+  }
 
-  $self->g->add_edges(map {
-    [ map { $self->vp_shadowed_by($_) // $_ } @$_ ]
-  } @replace);
-
-use YAML::XS;
-#warn Dump \@replace;
-
-  # NOTE: leaves if1/if2 etc. vertices not connected to If 
+  $self->g->feather_delete_edges($self->g->edges);
+  $self->g->add_edges(@new_edges);
 
   $self->_dbh->do(q{
     DELETE FROM edge
@@ -130,9 +127,6 @@ use YAML::XS;
       AND
       dst IN (SELECT vertex FROM vertex_property WHERE type = 'If1' OR type = 'If2')
   });
-
-
-  $self->g->feather_delete_edges(@replace);
 
   # NEW
 
@@ -184,8 +178,6 @@ sub _find_subgraph_between {
   my ($g2, $start_vertex, $final_vertex) = @_;
   my $subgraph = Graph::Feather->new();
 
-warn if $g2->vp_shadowed_by($start_vertex);
-
   my @todo = ($start_vertex);
 
   my %seen;
@@ -199,21 +191,27 @@ warn if $g2->vp_shadowed_by($start_vertex);
     next if $seen{ $current }++;
     next if $current eq $final_vertex;
 
-    if (defined $g2->vp_shadowed_by($current)) {
-      push @todo, $g2->vp_shadowed_by($current);
-    } 
+    my @shadowed_by = $g2->shadowed_by_or_self($current);
+
+    push @todo, @shadowed_by;
 
     push @edges, $g2->g->edges_from($current);
     push @todo, $g2->g->successors($current);
   }
 
-use YAML::XS;
+  my @new_edges;
+
+  for (@edges) {
+    for my $src ($g2->shadowed_by_or_self($_->[0])) {
+      for my $dst ($g2->shadowed_by_or_self($_->[1])) {
+        push @new_edges, [ $src, $dst ];
+      }
+    }
+  }
 
   $subgraph->add_edges(
-    map { [ map { $g2->vp_shadowed_by($_) // $_ } @$_ ] } @edges
+    @new_edges
   );
-
-#die;
 
   return $subgraph;
 }

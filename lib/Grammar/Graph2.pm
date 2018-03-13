@@ -47,7 +47,7 @@ sub vp_p1             { _rw_vertex_attribute('p1',            @_) }
 sub vp_p2             { _rw_vertex_attribute('p2',            @_) }
 sub vp_partner        { _rw_vertex_attribute('partner',       @_) }
 sub vp_run_list       { _rw_vertex_attribute('run_list',      @_) }
-sub vp_shadowed_by    { _rw_vertex_attribute('shadowed_by',   @_) }
+sub vp_shadows        { _rw_vertex_attribute('shadows',       @_) }
 sub vp_shadowed_edges { _rw_vertex_attribute('shadowed_edges',  @_) }
 sub vp_self_loop      { _rw_vertex_attribute('self_loop',     @_) }
 sub vp_topo           { _rw_vertex_attribute('topo',          @_) }
@@ -78,6 +78,26 @@ sub is_terminal_vertex {
 }
 
 sub is_epsilon_vertex  { not is_terminal_vertex(@_) }
+
+#####################################################################
+#
+#####################################################################
+sub shadowed_by_or_self {
+  my ($self, $v) = @_;
+
+  my @by = map { @$_ } $self->_dbh->selectall_array(q{
+    SELECT
+      vertex_p.vertex
+    FROM
+      vertex_property vertex_p
+        INNER JOIN json_each(vertex_p.shadows) each
+    WHERE
+      each.value = CAST(? AS INT) -- FIXME
+    }, {}, $v);
+
+  return $v unless @by;
+  return @by;
+}
 
 #####################################################################
 #
@@ -203,7 +223,6 @@ sub from_grammar_graph {
       is_pop NOT NULL DEFAULT 0,
       run_list,
       shadows,
-      shadowed_by,
       shadowed_edges,
       self_loop DEFAULT 'no',
       topo,

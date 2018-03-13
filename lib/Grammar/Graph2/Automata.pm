@@ -105,9 +105,9 @@ sub _shadow_subgraph_under_automaton {
     SELECT 1 + MAX(0 + vertex_name) FROM Vertex;
   });
 
-  my $new_start_vertex = ++$base_id;
+  my $new_final_vertex = ++$base_id;
 
-  $self->base_graph->vp_name($new_start_vertex, 'NEW_FINAL');
+  $self->base_graph->vp_name($new_final_vertex, 'NEW_FINAL');
 
   my $tr_sth = $d->_dbh->prepare(q{
     SELECT
@@ -196,15 +196,55 @@ sub _shadow_subgraph_under_automaton {
   }
 
   $self->base_graph->g->add_edges(
-    map { [ $base_id + $_, $new_start_vertex ] } @$accepting
+    map { [ $base_id + $_, $new_final_vertex ] } @$accepting
   );
+
+=pod
 
   $self->base_graph
     ->vp_shadowed_by($start_vertex, $base_id + $start_id);
   $self->base_graph
-    ->vp_shadowed_by($final_vertex, $new_start_vertex);
+    ->vp_shadowed_by($final_vertex, $new_final_vertex);
 
-  $self->base_graph->vp_shadowed_edges($new_start_vertex, '[]');
+=cut
+
+  # FIXME: needs to add, not replace:
+  $self->base_graph
+    ->vp_shadows($base_id + $start_id, $start_vertex);
+  $self->base_graph
+    ->vp_shadows($new_final_vertex, $final_vertex);
+
+  $self->base_graph->vp_shadowed_edges($new_final_vertex, '[]');
+
+  # TODO: add function to add edges
+  
+  $self->base_graph->vp_shadowed_edges($new_final_vertex, 
+    $self->_json->encode(
+      [
+        $self->base_graph->g->edges_from($final_vertex),
+        @{
+          $self->_json->decode(
+            $self->base_graph->vp_shadowed_edges($new_final_vertex)
+          )
+        }
+      ]
+    )
+  );
+
+  $self->base_graph->vp_shadowed_edges($base_id + $start_id, 
+    $self->_json->encode(
+      [
+        $self->base_graph->g->edges_to($start_vertex),
+        @{
+          $self->_json->decode(
+            $self->base_graph->vp_shadowed_edges($base_id + $start_id)
+          )
+        }
+      ]
+    )
+  );
+
+
 }
 
 1;
