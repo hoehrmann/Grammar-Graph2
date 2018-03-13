@@ -199,51 +199,22 @@ sub _shadow_subgraph_under_automaton {
     map { [ $base_id + $_, $new_final_vertex ] } @$accepting
   );
 
-=pod
-
-  $self->base_graph
-    ->vp_shadowed_by($start_vertex, $base_id + $start_id);
-  $self->base_graph
-    ->vp_shadowed_by($final_vertex, $new_final_vertex);
-
-=cut
-
   # FIXME: needs to add, not replace:
   $self->base_graph
     ->vp_shadows($base_id + $start_id, $start_vertex);
   $self->base_graph
     ->vp_shadows($new_final_vertex, $final_vertex);
 
+
   $self->base_graph->vp_shadowed_edges($new_final_vertex, '[]');
 
-  # TODO: add function to add edges
-  
-  $self->base_graph->vp_shadowed_edges($new_final_vertex, 
-    $self->_json->encode(
-      [
-        $self->base_graph->g->edges_from($final_vertex),
-        @{
-          $self->_json->decode(
-            $self->base_graph->vp_shadowed_edges($new_final_vertex)
-          )
-        }
-      ]
-    )
+  $self->base_graph->add_shadowed_edges($new_final_vertex,
+    $self->base_graph->g->edges_from($final_vertex),
   );
 
-  $self->base_graph->vp_shadowed_edges($base_id + $start_id, 
-    $self->_json->encode(
-      [
-        $self->base_graph->g->edges_to($start_vertex),
-        @{
-          $self->_json->decode(
-            $self->base_graph->vp_shadowed_edges($base_id + $start_id)
-          )
-        }
-      ]
-    )
+  $self->base_graph->add_shadowed_edges($base_id + $start_id,
+    $self->base_graph->g->edges_to($start_vertex),
   );
-
 
 }
 

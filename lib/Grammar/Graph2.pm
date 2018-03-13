@@ -25,6 +25,14 @@ has '_log' => (
   },
 );
 
+has '_json' => (
+  is       => 'ro',
+  required => 0,
+  default  => sub {
+    JSON->new->canonical(1)->ascii(1)->indent(0)
+  },
+);
+
 sub BUILD {
   my ($self) = @_;
   $self->_set_dbh( $self->g->{dbh} );
@@ -97,6 +105,24 @@ sub shadowed_by_or_self {
 
   return $v unless @by;
   return @by;
+}
+
+sub add_shadowed_edges {
+  my ($self, $vertex, @edges) = @_;
+
+  my @old_edges = @{
+    $self->_json->decode(
+      $self->vp_shadowed_edges($vertex)
+    )
+  };
+
+  $self->vp_shadowed_edges($vertex, 
+    $self->_json->encode([
+      @edges,
+      @old_edges
+    ])
+  );
+  
 }
 
 #####################################################################
