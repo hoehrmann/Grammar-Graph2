@@ -53,9 +53,7 @@ sub BUILD {
 }
 
 sub subgraph_automaton {
-  my ($self, $subgraph, $start_vertex) = @_;
-
-  # TODO: allow multiple start vertices
+  my ($self, $subgraph, @start_vertices) = @_;
 
 #  my $db_name = ':memory:';
   my $db_name = 'MATA-DFA.sqlite';
@@ -87,7 +85,9 @@ sub subgraph_automaton {
     storage_dsn     => "dbi:SQLite:dbname=$db_name",
   );
 
-  my $start_id = $d->find_or_create_state_id( $start_vertex );
+  my @start_ids = map {
+    $d->find_or_create_state_id( $_ )
+  } @start_vertices;
 
   while (my $count = $d->compute_some_transitions(2**17)) {
     $self->_log->debugf("Computed %u transitions", $count);
@@ -95,7 +95,7 @@ sub subgraph_automaton {
 
   $self->_log->debugf("Done computing transitions");
 
-  return ($d, $start_id);
+  return ($d, @start_ids);
 }
 
 sub _shadow_subgraph_under_automaton {
@@ -105,9 +105,9 @@ sub _shadow_subgraph_under_automaton {
     SELECT 1 + MAX(0 + vertex_name) FROM Vertex;
   });
 
-  my $final_id = ++$base_id;
+  my $new_start_vertex = ++$base_id;
 
-  $self->base_graph->vp_name($final_id, 'NEW_FINAL');
+  $self->base_graph->vp_name($new_start_vertex, 'NEW_FINAL');
 
   my $tr_sth = $d->_dbh->prepare(q{
     SELECT
@@ -196,15 +196,15 @@ sub _shadow_subgraph_under_automaton {
   }
 
   $self->base_graph->g->add_edges(
-    map { [ $base_id + $_, $final_id ] } @$accepting
+    map { [ $base_id + $_, $new_start_vertex ] } @$accepting
   );
 
   $self->base_graph
     ->vp_shadowed_by($start_vertex, $base_id + $start_id);
   $self->base_graph
-    ->vp_shadowed_by($final_vertex, $final_id);
+    ->vp_shadowed_by($final_vertex, $new_start_vertex);
 
-  $self->base_graph->vp_shadowed_edges($final_id, '[]');
+  $self->base_graph->vp_shadowed_edges($new_start_vertex, '[]');
 }
 
 1;
