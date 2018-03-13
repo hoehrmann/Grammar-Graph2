@@ -98,16 +98,12 @@ sub subgraph_automaton {
   return ($d, @start_ids);
 }
 
-sub _shadow_subgraph_under_automaton {
-  my ($self, $subgraph, $d, $start_vertex, $final_vertex, $start_id, $accepting) = @_;
+sub _insert_dfa {
+  my ($self, $d) = @_;
 
   my ($base_id) = $self->base_graph->g->{dbh}->selectrow_array(q{
     SELECT 1 + MAX(0 + vertex_name) FROM Vertex;
   });
-
-  my $new_final_vertex = ++$base_id;
-
-  $self->base_graph->vp_name($new_final_vertex, 'NEW_FINAL');
 
   my $tr_sth = $d->_dbh->prepare(q{
     SELECT
@@ -194,14 +190,36 @@ sub _shadow_subgraph_under_automaton {
     $self->base_graph
       ->vp_shadowed_edges($base_id + $state_id, $shadowed);
   }
+  
+  my ($max_state) = $d->_dbh->selectrow_array(q{
+    SELECT MAX(state_id) FROM State;
+  });
+
+  return map {
+    $_ => $base_id + $_
+  } 1 .. $max_state;
+}
+
+sub _shadow_subgraph_under_automaton {
+  my ($self, $subgraph, $d, $start_vertex, $final_vertex, $start_id, $accepting) = @_;
+
+  my %state_to_vertex = $self->_insert($d);
+
+  my ($base_id) = $self->base_graph->g->{dbh}->selectrow_array(q{
+    SELECT 1 + MAX(0 + vertex_name) FROM Vertex;
+  });
+
+  my $new_final_vertex = ++$base_id;
+
+  $self->base_graph->vp_name($new_final_vertex, 'NEW_FINAL');
 
   $self->base_graph->g->add_edges(
-    map { [ $base_id + $_, $new_final_vertex ] } @$accepting
+    map { [ $state_to_vertex{$_}, $new_final_vertex ] } @$accepting
   );
 
   # FIXME: needs to add, not replace:
   $self->base_graph
-    ->vp_shadows($base_id + $start_id, $start_vertex);
+    ->vp_shadows($state_to_vertex{$start_id}, $start_vertex);
   $self->base_graph
     ->vp_shadows($new_final_vertex, $final_vertex);
 
@@ -212,7 +230,7 @@ sub _shadow_subgraph_under_automaton {
     $self->base_graph->g->edges_from($final_vertex),
   );
 
-  $self->base_graph->add_shadowed_edges($base_id + $start_id,
+  $self->base_graph->add_shadowed_edges($state_to_vertex{$start_id},
     $self->base_graph->g->edges_to($start_vertex),
   );
 

@@ -112,31 +112,10 @@ sub _init {
   $self->g->feather_delete_edges($self->g->edges);
   $self->g->add_edges(@new_edges);
 
-  $self->_dbh->do(q{
-    DELETE FROM edge
-    WHERE
-      src IN (SELECT vertex FROM vertex_property WHERE type = 'If')
-      AND
-      dst NOT IN (SELECT vertex FROM vertex_property WHERE type = 'If1' OR type = 'If2')
-  });
-
-  $self->_dbh->do(q{
-    DELETE FROM edge
-    WHERE
-      src NOT IN (SELECT vertex FROM vertex_property WHERE type = 'If')
-      AND
-      dst IN (SELECT vertex FROM vertex_property WHERE type = 'If1' OR type = 'If2')
-  });
-
-  # NEW
-
-=pod
-
+  # unsure about this:
   my @good = graph_edges_between($self->g, $self->gp_start_vertex, $self->gp_final_vertex);
   $self->g->feather_delete_edges($self->g->edges);
   $self->g->add_edges(@good);
-
-=cut
 
   $self->_create_vertex_spans();
   $self->_log->debug('done creating spans');

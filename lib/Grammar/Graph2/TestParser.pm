@@ -57,7 +57,6 @@ sub BUILD {
   Grammar::Graph2::TestViews->new( g => $self->g );
 }
 
-
 # TODO: rename to compute_t or whatever
 sub create_t {
   my ($self) = @_;
@@ -70,10 +69,6 @@ sub create_t {
   $self->_update_shadowed_testparser_all_edges();
 
   $self->_create_without_unreachable_vertices();
-
-#  $self->_update_shadowed_result();
-#  $self->_update_shadowed_result();
-#  $self->_update_shadowed_result();
 
   $self->_dbh->do(q{ ANALYZE });
 
