@@ -109,12 +109,8 @@ sub _insert_dfa {
     SELECT
       (SELECT MAX(rowid) FROM state) + MIN(tr.rowid) AS vertex,
       tr.src AS src_state,
-      json_group_array(tr.input) as first_ords,
-      tr.dst AS dst_state,
-      json_group_array(json_array(
-        CAST(e.src AS TEXT),
-        CAST(e.dst AS TEXT)
-      )) AS shadow_edges
+      json_group_array(m.vertex) AS terminals,
+      tr.dst AS dst_state
     FROM
       Transition tr
         INNER JOIN Configuration src_cfg
@@ -134,23 +130,22 @@ sub _insert_dfa {
 
   my %cache;
   while (my $row = $tr_sth->fetchrow_arrayref) {
-    my ($via, $src, $ords, $dst, $shadowed) = @$row;
+    my ($via, $src, $terminals, $dst) = @$row;
+
+    $terminals = $self->_json->decode( $terminals );
 
     $self->base_graph->g->add_edges(
       [ $base_id + $src, $base_id + $via ],
       [ $base_id + $via, $base_id + $dst ],
     );
 
-    $self->base_graph->vp_shadowed_edges($base_id + $via, $shadowed);
     $self->base_graph->vp_type($base_id + $via, 'Input');
-
-    # TODO: this could be nicer:
-
-    my $items = $self->_json->decode( $ords );
+    $self->base_graph->add_shadows($base_id + $via,
+      @$terminals);
 
     my @run_lists = uniq(map {
-      $self->alphabet->_ord_to_list->{ $_ }
-    } uniq( @$items ));
+      $self->base_graph->vp_run_list($_)
+    } uniq( @$terminals ));
 
     my $encoded = $self->_json->encode(\@run_lists);
     $cache{ $encoded } //= Set::IntSpan->new(@run_lists);
@@ -158,6 +153,29 @@ sub _insert_dfa {
 
     $self->base_graph->vp_run_list($base_id + $via, $combined);
   }
+
+  my $st_sth = $d->_dbh->prepare(q{
+    SELECT
+      c1.state AS src_state,
+      c1.vertex AS vertices
+    FROM
+      Configuration c1
+        INNER JOIN Vertex vertex_p
+          ON (c1.vertex = vertex_p.value)
+    WHERE
+      vertex_p.is_nullable
+  });
+
+  $st_sth->execute();
+
+  while (my $row = $st_sth->fetchrow_arrayref) {
+    my ($state_id, $shadowed) = @$row;
+    $self->base_graph->vp_type($base_id + $state_id, 'empty');
+    $self->base_graph
+      ->add_shadows($base_id + $state_id, $shadowed);
+  }
+
+=pod
 
   my $st_sth = $d->_dbh->prepare(q{
     SELECT
@@ -190,7 +208,9 @@ sub _insert_dfa {
     $self->base_graph
       ->vp_shadowed_edges($base_id + $state_id, $shadowed);
   }
-  
+
+=cut
+
   my ($max_state) = $d->_dbh->selectrow_array(q{
     SELECT MAX(state_id) FROM State;
   });
@@ -203,7 +223,7 @@ sub _insert_dfa {
 sub _shadow_subgraph_under_automaton {
   my ($self, $subgraph, $d, $start_vertex, $final_vertex, $start_id, $accepting) = @_;
 
-  my %state_to_vertex = $self->_insert($d);
+  my %state_to_vertex = $self->_insert_dfa($d);
 
   my ($base_id) = $self->base_graph->g->{dbh}->selectrow_array(q{
     SELECT 1 + MAX(0 + vertex_name) FROM Vertex;

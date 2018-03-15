@@ -6,6 +6,7 @@ use Moo;
 use Graph::Feather;
 use Graph::Directed;
 use Grammar::Graph2::Init;
+use List::MoreUtils qw/uniq/;
 
 has 'g' => (
   is       => 'ro',
@@ -56,7 +57,6 @@ sub vp_p2             { _rw_vertex_attribute('p2',            @_) }
 sub vp_partner        { _rw_vertex_attribute('partner',       @_) }
 sub vp_run_list       { _rw_vertex_attribute('run_list',      @_) }
 sub vp_shadows        { _rw_vertex_attribute('shadows',       @_) }
-sub vp_shadowed_edges { _rw_vertex_attribute('shadowed_edges',  @_) }
 sub vp_self_loop      { _rw_vertex_attribute('self_loop',     @_) }
 sub vp_topo           { _rw_vertex_attribute('topo',          @_) }
 sub vp_epsilon_group  { _rw_vertex_attribute('epsilon_group', @_) }
@@ -107,23 +107,28 @@ sub shadowed_by_or_self {
   return @by;
 }
 
-sub add_shadowed_edges {
-  my ($self, $vertex, @edges) = @_;
+sub add_shadows {
+  my ($self, $vertex, @vertices) = @_;
 
-  my @old_edges = @{
+  @vertices = map {
+    $self->vp_shadows($_)
+      ? @{ $self->_json->decode($self->vp_shadows($_)) }
+      : $_
+  } @vertices;
+
+  my @old_vertices = @{
     $self->_json->decode(
-      $self->vp_shadowed_edges($vertex)
+      $self->vp_shadows($vertex) // '[]'
     )
   };
 
-  $self->vp_shadowed_edges($vertex, 
+  $self->vp_shadows($vertex, 
     $self->_json->encode([
-      @edges,
-      @old_edges
+      uniq(@vertices, @old_vertices)
     ])
   );
-  
 }
+
 
 #####################################################################
 #
@@ -249,7 +254,6 @@ sub from_grammar_graph {
       is_pop NOT NULL DEFAULT 0,
       run_list,
       shadows,
-      shadowed_edges,
       self_loop DEFAULT 'no',
       topo,
       epsilon_group,

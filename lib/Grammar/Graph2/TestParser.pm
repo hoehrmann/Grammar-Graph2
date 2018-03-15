@@ -267,43 +267,66 @@ sub _update_shadowed_testparser_all_edges {
   my ($self) = @_;
 
   $self->_dbh->do(q{
-
+    WITH vertex_shadowed_by AS (
+      SELECT 
+        vertex_p.vertex AS vertex,
+        CAST(each.value AS TEXT) AS by
+      FROM
+        vertex_property vertex_p
+          INNER JOIN json_each(vertex_p.shadows) each
+    )
     INSERT OR IGNORE INTO testparser_all_edges(src_pos,
       src_vertex, dst_pos, dst_vertex)
     SELECT DISTINCT
       a.src_pos AS src_pos,
-      json_extract(each.value, '$[0]') AS src_vertex,
-      CASE
-        WHEN src_p.type = 'Input' THEN a.src_pos + 1
-        ELSE a.src_pos
-      END AS dst_pos,
-      json_extract(each.value, '$[1]') AS dst_vertex
+      COALESCE(src_shadow.by, a.src_vertex) AS src_vertex,
+      a.dst_pos AS dst_pos,
+      COALESCE(dst_shadow.by, a.dst_vertex) AS dst_vertex
     FROM
       testparser_all_edges a
-        INNER JOIN vertex_property src_p
-          ON (a.src_vertex = src_p.vertex
-            -- AND src_p.shadowed_edges IS NOT NULL
-            )
-        INNER JOIN json_each(src_p.shadowed_edges) each
-          ON (1)
+        LEFT JOIN vertex_shadowed_by src_shadow
+          ON (src_shadow.vertex = a.src_vertex)
+        LEFT JOIN vertex_shadowed_by dst_shadow
+          ON (dst_shadow.vertex = a.dst_vertex)
+    ORDER BY
+      a.src_pos,
+      a.src_vertex,
+      a.dst_pos,
+      a.dst_vertex
   });
 
   $self->_dbh->do(q{
     DELETE FROM testparser_all_edges
     WHERE
-      src_vertex IN (SELECT vertex FROM vertex_property WHERE shadowed_edges IS NOT NULL)
+/*
+      src_vertex IN (SELECT vertex FROM vertex_property WHERE shadows IS NOT NULL)
       OR
-      dst_vertex IN (SELECT vertex FROM vertex_property WHERE shadowed_edges IS NOT NULL)
-  });
+      dst_vertex IN (SELECT vertex FROM vertex_property WHERE shadows IS NOT NULL)
+      OR
+*/
+      NOT EXISTS (SELECT 1 FROM old_edge o WHERE o.src = testparser_all_edges.src_vertex AND o.dst = testparser_all_edges.dst_vertex)
+  }) if 1;
 
-  # TODO: IMPORTANT. Why haps?
   $self->_dbh->do(q{
     DELETE FROM testparser_all_edges
     WHERE
-      src_vertex IN (SELECT vertex FROM vertex_property WHERE type = 'Input')
-      AND
-      src_pos = dst_pos
-  });
+      src_vertex NOT IN (
+        SELECT
+          vertex
+        FROM
+          vertex_property vertex_p
+        WHERE
+          type <> 'Input'
+        UNION ALL
+        SELECT
+          s.vertex
+        FROM
+          testparser_input i
+            INNER JOIN vertex_span s
+              ON (i.pos = testparser_all_edges.src_pos AND i.ord >= s.min AND i.ord <= s.max)
+
+      )
+  }) if 1;
 
 }
 
@@ -368,7 +391,7 @@ sub _create_without_unreachable_vertices {
     SELECT
       *
     FROM
-      backward
+      backward -- @@@@@
     ORDER BY
       src_pos,
       src_vertex,
@@ -680,334 +703,3 @@ sub _create_trees_bottom_up {
 1;
 
 __END__
-
-
-  q{
-    WITH fi2_fi(vertex, json_key) AS (
-      SELECT
-        vertex_p.vertex AS vertex,
-        each2.fullkey AS fi2_fi_key
-      FROM
-        vertex_property vertex_p
-          INNER JOIN
-            json_each(vertex_p.shadowed_edges) each1
-          INNER JOIN
-            json_each(vertex_p.shadowed_edges) each2
-      WHERE
-        json_extract(each1.value, '$[0]') = ?
-        AND
-        json_extract(each1.value, '$[1]') = ?
-        AND
-        json_extract(each2.value, '$[0]') = ?
-        AND
-        json_extract(each2.value, '$[1]') = ?
-    )
-    UPDATE
-      vertex_property
-    SET
-      shadowed_edges = json_remove(shadowed_edges, ...)
-      
-  };
-
-...
-
-WITH
-adjunct(vertex, adjunct) AS (
-  SELECT
-    vertex,
-    scc.value
-  FROM
-    vertex_property vp
-      INNER JOIN json_each(vp.epsilon_group) scc
-)
-SELECT DISTINCT
-  src_pos,
-  src_each.adjunct AS src_vertex,
-  dst_pos,
-  dst_each.adjunct AS dst_vertex
-FROM
-  testparser_all_edges ta
-    INNER JOIN vertex_property src_p
-      ON (src_p.vertex = ta.src_vertex)
-    INNER JOIN vertex_property dst_p
-      ON (dst_p.vertex = ta.dst_vertex)
-    INNER JOIN adjunct src_each
-      ON (src_each.vertex = src_p.vertex)
-    INNER JOIN adjunct dst_each
-      ON (dst_each.vertex = dst_p.vertex)
-ORDER BY
-  src_pos,
-  src_p.topo,
-  dst_pos,
-  dst_p.topo
-
-----
-
-sub _update_shadowed_testparser_all_edges_oldxxx {
-  my ($self) = @_;
-
-  # TODO: crap code
-
-#return;
-
-=pod
-
-
-  $self->_dbh->do(q{
-    UPDATE OR REPLACE
-      testparser_all_edges 
-    SET
-      src_vertex = (SELECT shadows
-                    FROM vertex_property
-                    WHERE testparser_all_edges.src_vertex
-                      = vertex_property.vertex)
-    WHERE
-      EXISTS (SELECT 1
-              FROM vertex_property
-              WHERE
-                testparser_all_edges.src_vertex
-                  = vertex_property.vertex
-                  AND shadows IS NOT NULL)
-  });
-
-  $self->_dbh->do(q{
-    UPDATE OR REPLACE
-      testparser_all_edges
-    SET
-      dst_vertex = (SELECT shadows
-                    FROM vertex_property
-                    WHERE testparser_all_edges.dst_vertex
-                      = vertex_property.vertex)
-    WHERE
-      EXISTS (SELECT 1
-              FROM vertex_property
-              WHERE
-                testparser_all_edges.dst_vertex
-                  = vertex_property.vertex
-                  AND shadows IS NOT NULL)
-  });
-
-# return;
-
-=cut
-
-  $self->_dbh->do(q{
-
-    INSERT OR IGNORE INTO testparser_all_edges(src_pos,
-      src_vertex, dst_pos, dst_vertex)
-    SELECT DISTINCT
-      a.src_pos AS src_pos,
-      json_extract(each.value, '$[0]') AS src_vertex,
-      CASE
-        WHEN src_p.type = 'Input' THEN a.src_pos + 1
-        ELSE a.src_pos
-      END AS dst_pos,
-      json_extract(each.value, '$[1]') AS dst_vertex
-    FROM
-      testparser_all_edges a
-        INNER JOIN vertex_property src_p
-          ON (a.src_vertex = src_p.vertex
-            -- AND src_p.shadowed_edges IS NOT NULL
-            )
-        INNER JOIN json_each(src_p.shadowed_edges) each
-          ON (1)
-  });
-
-=pod
-
-  $self->_dbh->do(q{
-    UPDATE OR REPLACE testparser_all_edges SET src_vertex = COALESCE((SELECT vertex FROM vertex_property vp WHERE vp.shadowed_by = testparser_all_edges.src_vertex), src_vertex);
-  }) if 1;
-
-  $self->_dbh->do(q{
-    UPDATE OR REPLACE testparser_all_edges SET dst_vertex = COALESCE((SELECT vertex FROM vertex_property vp WHERE vp.shadowed_by = testparser_all_edges.dst_vertex), dst_vertex);
-  }) if 1;
-
-=cut
-
-  $self->_dbh->do(q{
-    WITH
-    shadowed_by AS (
-      SELECT
-        vertex_p.vertex AS vertex,
-        shadow_p.vertex AS shadowed_by
-      FROM
-        vertex_property shadow_p
-          LEFT JOIN json_each(shadow_p.shadows) each
-          LEFT JOIN vertex_property vertex_p
-            ON (CAST(each.value AS INT) = CAST(vertex_p.vertex AS INT))
-    ),
-    shadowed_by_or_self AS (
-      SELECT
-        vertex_p.vertex,
-        COALESCE(shadowed_by.shadowed_by, vertex_p.vertex) AS shadow
-      FROM
-        vertex_property vertex_p
-          LEFT JOIN shadowed_by
-            ON (shadowed_by.vertex = vertex_p.vertex)
-    )
-    INSERT INTO testparser_all_edges
-    SELECT
-      all_edges.src_pos,
-      src.vertex AS src_vertex,
-      all_edges.dst_pos,
-      dst.vertex AS dst_vertex
-    FROM
-      testparser_all_edges all_edges
-        INNER JOIN shadowed_by_or_self src
-          ON (src.shadow = all_edges.src_vertex)
-        INNER JOIN shadowed_by_or_self dst
-          ON (dst.shadow = all_edges.dst_vertex)
-  }) if 0;
-
-  $self->_dbh->do(q{
-
-    INSERT OR IGNORE INTO testparser_all_edges(src_pos,
-      src_vertex, dst_pos, dst_vertex)
-    SELECT
-      src_pos,
-      COALESCE(src_vertex, src_by.vertex),
-      dst_pos,
-      COALESCE(dst_vertex, dst_by.vertex)
-    FROM
-      testparser_all_edges a
-        INNER JOIN vertex_property src_p
-          ON (a.src_vertex = src_p.vertex)
-        INNER JOIN vertex_property dst_p
-          ON (a.src_vertex = dst_p.vertex)
-        LEFT JOIN vertex_property src_by
-          ON (src_by.vertex = src_p.shadowed_by)
-        LEFT JOIN vertex_property dst_by
-          ON (dst_by.vertex = dst_p.shadowed_by)
-    WHERE
-      src_by.vertex IS NOT NULL
-      OR 
-      dst_by.vertex IS NOT NULL 
-  }) if 0;
-
-  $self->_dbh->do(q{
-    DELETE FROM testparser_all_edges
-    WHERE
-      src_vertex IN (SELECT vertex FROM vertex_property WHERE type = 'If')
-      AND
-      dst_vertex NOT IN (SELECT vertex FROM vertex_property WHERE type = 'If1' OR type = 'If2')
-  }) if 0;
-
-  $self->_dbh->do(q{
-    DELETE FROM testparser_all_edges
-    WHERE
-      src_vertex IN (SELECT vertex FROM vertex_property WHERE shadowed_edges IS NOT NULL)
-      OR
-      dst_vertex IN (SELECT vertex FROM vertex_property WHERE shadowed_edges IS NOT NULL)
-  });
-
-  # TODO: IMPORTANT. Why haps?
-  $self->_dbh->do(q{
-    DELETE FROM testparser_all_edges
-    WHERE
-      src_vertex IN (SELECT vertex FROM vertex_property WHERE type = 'Input')
-      AND
-      src_pos = dst_pos
-  });
-
-=pod
-
-  $self->_dbh->do(q{
-    DELETE FROM testparser_all_edges
-    WHERE
-      EXISTS (SELECT 1
-              FROM vertex_property p
-              WHERE p.shadowed_edges IS NOT NULL
-                AND (
-                  testparser_all_edges.dst_vertex = p.vertex
-                  OR
-                  testparser_all_edges.src_vertex = p.vertex
-                ))
-  });
-
-=cut
-
-}
-
----
-
-
-sub _update_shadowed_result {
-  my ($self) = @_;
-
-  # TODO: crap code
-
-#return;
-
-  $self->_dbh->do(q{
-    UPDATE OR REPLACE
-      result 
-    SET
-      src_vertex = (SELECT shadows
-                    FROM vertex_property
-                    WHERE result.src_vertex
-                      = vertex_property.vertex)
-    WHERE
-      EXISTS (SELECT 1
-              FROM vertex_property
-              WHERE
-                result.src_vertex
-                  = vertex_property.vertex
-                  AND shadows IS NOT NULL)
-  });
-
-  $self->_dbh->do(q{
-    UPDATE OR REPLACE
-      result
-    SET
-      dst_vertex = (SELECT shadows
-                    FROM vertex_property
-                    WHERE result.dst_vertex
-                      = vertex_property.vertex)
-    WHERE
-      EXISTS (SELECT 1
-              FROM vertex_property
-              WHERE
-                result.dst_vertex
-                  = vertex_property.vertex
-                  AND shadows IS NOT NULL)
-  });
-
-# return;
-
-  $self->_dbh->do(q{
-
-    INSERT OR IGNORE INTO result(src_pos,
-      src_vertex, dst_pos, dst_vertex)
-    SELECT DISTINCT
-      a.src_pos AS src_pos,
-      json_extract(each.value, '$[0]') AS src_vertex,
-      CASE
-        WHEN src_p.type = 'Input' THEN a.src_pos + 1
-        ELSE a.src_pos
-      END AS dst_pos,
-      json_extract(each.value, '$[1]') AS dst_vertex
-    FROM
-      result a
-        INNER JOIN vertex_property src_p
-          ON (a.src_vertex = src_p.vertex
-            -- AND src_p.shadowed_edges IS NOT NULL
-            )
-        INNER JOIN json_each(src_p.shadowed_edges) each
-          ON (1)
-  });
-
-  $self->_dbh->do(q{
-    DELETE FROM result
-    WHERE
-      EXISTS (SELECT 1
-              FROM vertex_property p
-              WHERE p.shadowed_edges IS NOT NULL
-                AND (
-                  result.dst_vertex = p.vertex
-                  OR
-                  result.src_vertex = p.vertex
-                ))
-  });
-
-}

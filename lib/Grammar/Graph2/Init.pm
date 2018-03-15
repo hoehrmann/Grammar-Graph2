@@ -16,6 +16,7 @@ use Grammar::Graph2;
 use Grammar::Graph2::TestParser::MatchEnumerator;
 use Grammar::Graph2::Topology;
 use Grammar::Graph2::Automata;
+use Grammar::Graph2::Megamata;
 
 sub _init {
   my ($self) = @_;
@@ -28,77 +29,14 @@ sub _init {
     g => $self,
   );
 
-  $self->_dbh->do(q{
-    DROP VIEW IF EXISTS view_shadowed_leafs;
+  $dbh->sqlite_backup_to_file('BEFORE-MEGA.sqlite');
 
-    CREATE VIEW view_shadowed_leafs AS
-    WITH RECURSIVE shadowed(root, src, dst) AS (
+  Grammar::Graph2::Megamata->new(
+    base_graph => $self,
+  )->mega if 1;
 
-      SELECT
-        vertex_p.vertex AS root,
-        json_extract(each.value, '$[0]') AS src,
-        json_extract(each.value, '$[1]') AS dst
-      FROM
-        vertex_property vertex_p
-          INNER JOIN json_each(vertex_p.shadowed_edges) each
-
-      UNION
-
-      SELECT
-        vertex_p.vertex AS root,
-        shadowed.src AS src,
-        shadowed.dst AS dst
-      FROM
-        vertex_property vertex_p
-          INNER JOIN json_each(vertex_p.shadowed_edges) each
-          INNER JOIN shadowed
-            ON (shadowed.src = json_extract(each.value, '$[0]')
-              OR shadowed.dst =  json_extract(each.value, '$[1]'))
-
-      ORDER BY
-        1, 2, 3
-    )
-    SELECT
-      root_p.vertex,
-      json_group_array(
-        json_array(shadowed.src, shadowed.dst)
-      ) AS shadowed_edges
-    FROM
-      vertex_property root_p
-        LEFT JOIN shadowed
-          ON (shadowed.root = root_p.vertex)
-        LEFT JOIN vertex_property src_p
-          ON (shadowed.src = src_p.vertex)
-        LEFT JOIN vertex_property dst_p
-          ON (shadowed.dst = dst_p.vertex)
-    WHERE
-      src_p.shadowed_edges IS NULL
-      AND
-      dst_p.shadowed_edges IS NULL
-      AND
-      root_p.shadowed_edges IS NOT NULL
-      AND
-      shadowed.src IS NOT NULL
-      AND
-      shadowed.dst IS NOT NULL
-    GROUP BY
-      root_p.vertex
-    ORDER BY
-      root_p.vertex
-
-  });
-
-  $self->_replace_conditionals();
+#  $self->_replace_conditionals();
   $self->_log->debug('done _replace_conditionals');
-
-  $self->_dbh->do(q{
-    UPDATE
-      vertex_property
-    SET
-      shadowed_edges = (SELECT shadowed_edges
-                        FROM view_shadowed_leafs v
-                        WHERE v.vertex = vertex_property.vertex)
-  });
 
   my @new_edges;
   for ($self->g->edges) {
@@ -109,13 +47,17 @@ sub _init {
     }
   }
 
+  $self->_dbh->do(q{
+    CREATE TABLE old_edge AS SELECT * FROM edge
+  });
+
   $self->g->feather_delete_edges($self->g->edges);
   $self->g->add_edges(@new_edges);
 
   # unsure about this:
-  my @good = graph_edges_between($self->g, $self->gp_start_vertex, $self->gp_final_vertex);
-  $self->g->feather_delete_edges($self->g->edges);
-  $self->g->add_edges(@good);
+#  my @good = graph_edges_between($self->g, $self->gp_start_vertex, $self->gp_final_vertex);
+#  $self->g->feather_delete_edges($self->g->edges);
+#  $self->g->add_edges(@good);
 
   $self->_create_vertex_spans();
   $self->_log->debug('done creating spans');
