@@ -18,6 +18,8 @@ use Grammar::Graph2::Topology;
 use Grammar::Graph2::Automata;
 use Grammar::Graph2::Megamata;
 
+use Memoize;
+
 sub _init {
   my ($self) = @_;
 
@@ -29,7 +31,7 @@ sub _init {
     g => $self,
   );
 
-  $dbh->sqlite_backup_to_file('BEFORE-MEGA.sqlite');
+#  $dbh->sqlite_backup_to_file('BEFORE-MEGA.sqlite');
 
   Grammar::Graph2::Megamata->new(
     base_graph => $self,
@@ -285,6 +287,11 @@ sub _create_vertex_spans {
     INSERT INTO vertex_span(vertex, min, max) VALUES (?, ?, ?)
   });
 
+  my $spans_for_run_list = memoize(sub{
+    my ($run_list) = @_;
+    return Set::IntSpan->new($run_list)->spans;
+  });
+
   for my $v ($self->g->vertices) {
 
     my $type = $self->vp_type($v);
@@ -293,15 +300,9 @@ sub _create_vertex_spans {
       next if $type eq 'Prelude';
       next if $type eq 'Postlude';
 
-      my $char_obj = Set::IntSpan->new(
-        $self->vp_run_list($v)
-      );
-
-#      $self->g->vp_type($v, 'Input');
-      die unless UNIVERSAL::can($char_obj, 'spans');
       $dbh->begin_work();
       $span_insert_sth->execute($v, @$_)
-        for $char_obj->spans;
+        for $spans_for_run_list->( $self->vp_run_list($v) );
       $dbh->commit();
     }
   }
