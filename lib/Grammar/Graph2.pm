@@ -110,23 +110,34 @@ sub shadowed_by_or_self {
 sub add_shadows {
   my ($self, $vertex, @vertices) = @_;
 
-  @vertices = map {
-    $self->vp_shadows($_)
-      ? @{ $self->_json->decode($self->vp_shadows($_)) }
-      : $_
-  } @vertices;
-
-  my @old_vertices = @{
-    $self->_json->decode(
-      $self->vp_shadows($vertex) // '[]'
+  my (undef, $combined) = $self->_dbh->selectrow_array(q{
+    WITH combined AS (
+      SELECT
+        vertex_p.vertex AS vertex,
+        each.value AS shadows
+      FROM
+        vertex_property vertex_p
+          INNER JOIN json_each(vertex_p.shadows) each
+      WHERE
+        vertex_p.vertex = ?
+      UNION
+      SELECT
+        ? AS vertex,
+        each.value AS shadows
+      FROM
+        json_each(?) each
     )
-  };
+    SELECT
+      vertex,
+      json_group_array(shadows) AS shadows
+    FROM
+      combined
+    GROUP BY
+      vertex
+  }, {}, $vertex, $vertex, $self->_json->encode(\@vertices));
 
-  $self->vp_shadows($vertex, 
-    $self->_json->encode([
-      uniq(@vertices, @old_vertices)
-    ])
-  );
+  $self->vp_shadows($vertex, $combined);
+
 }
 
 

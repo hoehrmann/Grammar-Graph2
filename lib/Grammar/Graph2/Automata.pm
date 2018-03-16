@@ -63,6 +63,16 @@ sub subgraph_automaton {
     return Set::IntSpan->new(@_)
   });
 
+  my $run_list_contains_ord = memoize(sub {
+    my ($run_list, $ord) = @_;
+    return $intspan_for_runlist->($run_list)->member($ord);
+  });
+
+  my $vertex_run_list = memoize(sub {
+    my ($vertex) = @_;
+    return $self->base_graph->vp_run_list($vertex);
+  });
+
   my $d = Algorithm::ConstructDFA2->new(
 
     input_alphabet  => [ $self->alphabet->first_ords ],
@@ -77,9 +87,9 @@ sub subgraph_automaton {
     vertex_matches  => sub {
       my ($vertex, $input) = @_;
 
-      return $intspan_for_runlist->(
-        $self->base_graph->vp_run_list($vertex)
-      )->member($input);
+      return $run_list_contains_ord->(
+        $vertex_run_list->($vertex), $input
+      );
     },
 
     storage_dsn     => "dbi:SQLite:dbname=$db_name",
@@ -159,47 +169,15 @@ sub _insert_dfa {
   my $st_sth = $d->_dbh->prepare(q{
     SELECT
       c1.state AS src_state,
-      c1.vertex AS vertices
+      json_group_array(c1.vertex) AS vertices
     FROM
       Configuration c1
         INNER JOIN Vertex vertex_p
           ON (c1.vertex = vertex_p.value)
     WHERE
       vertex_p.is_nullable
-  });
-
-  $st_sth->execute();
-
-  while (my $row = $st_sth->fetchrow_arrayref) {
-    my ($state_id, $shadowed) = @$row;
-    $self->base_graph->vp_type($base_id + $state_id, 'empty');
-    $self->base_graph
-      ->add_shadows($base_id + $state_id, $shadowed);
-  }
-
-=pod
-
-  my $st_sth = $d->_dbh->prepare(q{
-    SELECT
-      s.state_id AS src_state,
-      json_group_array(json_array(
-        CAST(e.src AS TEXT),
-        CAST(e.dst AS TEXT)
-      )) AS shadow_edges
-    FROM
-      State s
-        INNER JOIN Configuration c1
-          ON (s.state_id = c1.state)
-        INNER JOIN Vertex src_p
-          ON (c1.vertex = src_p.value)
-        LEFT JOIN Edge e
-          ON (c1.vertex = e.src
-            AND src_p.is_nullable)
-        LEFT JOIN Configuration c2
-          ON (c2.state = c1.state AND
-            c2.vertex = e.dst)
     GROUP BY
-      s.state_id
+      c1.vertex
   });
 
   $st_sth->execute();
@@ -207,11 +185,9 @@ sub _insert_dfa {
   while (my $row = $st_sth->fetchrow_arrayref) {
     my ($state_id, $shadowed) = @$row;
     $self->base_graph->vp_type($base_id + $state_id, 'empty');
-    $self->base_graph
-      ->vp_shadowed_edges($base_id + $state_id, $shadowed);
+    $self->base_graph->add_shadows($base_id + $state_id,
+        @{ $self->_json->decode($shadowed) });
   }
-
-=cut
 
   my ($max_state) = $d->_dbh->selectrow_array(q{
     SELECT MAX(state_id) FROM State;
