@@ -298,13 +298,10 @@ sub _update_shadowed_testparser_all_edges {
   $self->_dbh->do(q{
     DELETE FROM testparser_all_edges
     WHERE
-/*
-      src_vertex IN (SELECT vertex FROM vertex_property WHERE shadows IS NOT NULL)
-      OR
-      dst_vertex IN (SELECT vertex FROM vertex_property WHERE shadows IS NOT NULL)
-      OR
-*/
-      NOT EXISTS (SELECT 1 FROM old_edge o WHERE o.src = testparser_all_edges.src_vertex AND o.dst = testparser_all_edges.dst_vertex)
+      NOT EXISTS (SELECT 1
+                  FROM old_edge o
+                  WHERE o.src = testparser_all_edges.src_vertex
+                    AND o.dst = testparser_all_edges.dst_vertex)
   }) if 1;
 
   $self->_dbh->do(q{
