@@ -38,14 +38,27 @@ sub _init {
 #  $self->_replace_conditionals();
   $self->_log->debug('done _replace_conditionals');
 
-  my @new_edges;
-  for ($self->g->edges) {
-    for my $src ($self->shadowed_by_or_self($_->[0])) {
-      for my $dst ($self->shadowed_by_or_self($_->[1])) {
-        push @new_edges, [ $src, $dst ];
-      }
-    }
-  }
+  my @new_edges = $self->_dbh->selectall_array(q{
+    WITH vertex_shadowed_by AS (
+      SELECT 
+        vertex_p.vertex AS vertex,
+        CAST(each.value AS TEXT) AS by
+      FROM
+        vertex_property vertex_p
+          INNER JOIN json_each(vertex_p.shadows) each
+    )
+    SELECT
+      COALESCE(src_shadow.by, Edge.src) AS src,
+      COALESCE(dst_shadow.by, Edge.dst) AS dst
+    FROM
+      Edge
+        LEFT JOIN vertex_shadowed_by src_shadow
+          ON (src_shadow.vertex = Edge.src)
+        LEFT JOIN vertex_shadowed_by dst_shadow
+          ON (dst_shadow.vertex = Edge.dst)
+  });
+
+  $self->_log->debug('done computing new edges');
 
   $self->_dbh->do(q{
     CREATE TABLE old_edge AS SELECT * FROM edge
