@@ -63,10 +63,14 @@ sub create_t {
 
   $self->_file_to_table();
 
+  $self->_dbh->do(q{ ANALYZE });
+
   $self->_create_grammar_input_cross_product();
 
   # undoes _replace_conditionals
   $self->_update_shadowed_testparser_all_edges();
+
+  $self->_dbh->do(q{ ANALYZE });
 
   $self->_create_without_unreachable_vertices();
 
@@ -197,6 +201,10 @@ sub _create_grammar_input_cross_product_idea {
     )
   });
 
+  $self->_dbh->do(q{
+    ANALYZE testparser_all_edges
+  });
+
 }
 
 sub _create_grammar_input_cross_product {
@@ -295,6 +303,14 @@ sub _update_shadowed_testparser_all_edges {
       a.dst_vertex
   });
 
+
+
+  $self->_dbh->do(q{
+    ANALYZE testparser_all_edges;
+    ANALYZE old_edge;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_old_edge ON old_edge(src,dst);
+  }) if 1;
+  
   $self->_dbh->do(q{
     DELETE FROM testparser_all_edges
     WHERE
@@ -302,6 +318,21 @@ sub _update_shadowed_testparser_all_edges {
                   FROM old_edge o
                   WHERE o.src = testparser_all_edges.src_vertex
                     AND o.dst = testparser_all_edges.dst_vertex)
+  }) if 0;
+
+  $self->_dbh->do(q{
+    WITH good_rowids AS (
+      SELECT
+        all_edges.rowid
+      FROM
+        old_edge o
+          INNER JOIN testparser_all_edges all_edges
+            ON (all_edges.src_vertex = o.src
+              AND all_edges.dst_vertex = o.dst)
+    )
+    DELETE FROM testparser_all_edges
+    WHERE
+      rowid NOT IN (SELECT * FROM good_rowids)
   }) if 1;
 
   $self->_dbh->do(q{

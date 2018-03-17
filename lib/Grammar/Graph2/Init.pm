@@ -33,32 +33,48 @@ sub _init {
 
 #  $dbh->sqlite_backup_to_file('BEFORE-MEGA.sqlite');
 
+  $self->_replace_conditionals();
+  $self->_log->debug('done _replace_conditionals');
+
   Grammar::Graph2::Megamata->new(
     base_graph => $self,
   )->mega if 1;
+  $self->_log->debug('done mega');
 
-#  $self->_replace_conditionals();
-  $self->_log->debug('done _replace_conditionals');
+#  $self->_cover_root();
+  $self->_log->debug('done cover root');
 
   my @new_edges = $self->_dbh->selectall_array(q{
-    WITH vertex_shadowed_by AS (
+    WITH
+    vertex_shadowed_by AS (
       SELECT 
-        vertex_p.vertex AS vertex,
-        CAST(each.value AS TEXT) AS by
+        CAST(each.value AS TEXT) AS vertex,
+        vertex_p.vertex AS by
       FROM
         vertex_property vertex_p
           INNER JOIN json_each(vertex_p.shadows) each
+    ),
+    edge_selector AS (
+      SELECT * FROM Edge
+    ),
+    edge_shadowed_by_or_self AS (
+      SELECT
+        COALESCE(src_shadow.by, e.src) AS src,
+        COALESCE(dst_shadow.by, e.dst) AS dst
+      FROM
+        edge_selector e
+          LEFT JOIN vertex_shadowed_by src_shadow
+            ON (src_shadow.vertex = e.src)
+          LEFT JOIN vertex_shadowed_by dst_shadow
+            ON (dst_shadow.vertex = e.dst)
     )
     SELECT
-      COALESCE(src_shadow.by, Edge.src) AS src,
-      COALESCE(dst_shadow.by, Edge.dst) AS dst
+      *
     FROM
-      Edge
-        LEFT JOIN vertex_shadowed_by src_shadow
-          ON (src_shadow.vertex = Edge.src)
-        LEFT JOIN vertex_shadowed_by dst_shadow
-          ON (dst_shadow.vertex = Edge.dst)
+      edge_shadowed_by_or_self
   });
+
+  # TODO: use this ^ below when subgraphing
 
   $self->_log->debug('done computing new edges');
 
@@ -69,15 +85,60 @@ sub _init {
   $self->g->feather_delete_edges($self->g->edges);
   $self->g->add_edges(@new_edges);
 
+  $self->g->feather_delete_edges($self->g->edges_at(
+    $self->gp_dead_vertex
+  ));
+
   # unsure about this:
-#  my @good = graph_edges_between($self->g, $self->gp_start_vertex, $self->gp_final_vertex);
-#  $self->g->feather_delete_edges($self->g->edges);
-#  $self->g->add_edges(@good);
+  my @good = graph_edges_between($self->g, $self->gp_start_vertex, $self->gp_final_vertex);
+  $self->g->feather_delete_edges($self->g->edges);
+  $self->g->add_edges(@good);
 
   $self->_create_vertex_spans();
   $self->_log->debug('done creating spans');
 
   $self->_dbh->do(q{ ANALYZE });
+}
+
+#####################################################################
+# This stuff does not really belong here, and not with the other part
+#####################################################################
+sub _cover_root_new {
+  my ($g2) = @_;
+
+  my ($start_vertex) = $g2->g->successors($g2->gp_start_vertex);
+  my ($final_vertex) = $g2->g->predecessors($g2->gp_final_vertex);
+
+die unless $g2->is_prelude_vertex($start_vertex);
+die unless $g2->is_postlude_vertex($final_vertex);
+
+  my $subgraph = _shadowed_subgraph_between($g2,
+    $start_vertex, $final_vertex);
+
+  my $automata = Grammar::Graph2::Automata->new(
+    base_graph => $g2,
+  );
+
+  my ($d, $start_id) = $automata->subgraph_automaton($subgraph,
+    $start_vertex);
+
+  my %state_to_vertex = $automata->_insert_dfa($d);
+}
+
+sub _cover_root {
+  my ($g2) = @_;
+
+  my $subgraph = _shadowed_subgraph_between($g2,
+    $g2->gp_start_vertex, $g2->gp_final_vertex);
+
+  my $automata = Grammar::Graph2::Automata->new(
+    base_graph => $g2,
+  );
+
+  my ($d, $start_id) = $automata->subgraph_automaton($subgraph,
+    $g2->gp_start_vertex);
+
+  my %state_to_vertex = $automata->_insert_dfa($d);
 }
 
 #####################################################################
@@ -101,58 +162,20 @@ sub _replace_conditionals {
   my $scg = $gx->strongly_connected_graph;
 
   for my $scc (reverse $scg->toposort) {
-    warn 'HELL!' if $scc =~ /\+/ and 1 < grep { $g2->is_if_vertex($_) } split/\+/, $scc;
-#    last;
-    next unless $g2->is_if_vertex($scc);
-    _replace_if_fi_by_unmodified_dfa_vertices($g2, $scc);
+    my @ifs = grep { $g2->is_if_vertex($_) } split/\+/, $scc;
+
+    warn 'HELL!' if 1 < @ifs;
+
+    next unless @ifs;
+    next if @ifs > 1;
+
+    _new_cond($g2, @ifs);
 #    warn "replacing only once" and last;
   }
 
 }
 
-sub _find_subgraph_between {
-  my ($g2, $start_vertex, $final_vertex) = @_;
-  my $subgraph = Graph::Feather->new();
-
-  my @todo = ($start_vertex);
-
-  my %seen;
-  my @edges;
-
-  while (@todo) {
-    my $current = shift @todo;
-
-# warn $current; 
-
-    next if $seen{ $current }++;
-    next if $current eq $final_vertex;
-
-    my @shadowed_by = $g2->shadowed_by_or_self($current);
-
-    push @todo, @shadowed_by;
-
-    push @edges, $g2->g->edges_from($current);
-    push @todo, $g2->g->successors($current);
-  }
-
-  my @new_edges;
-
-  for (@edges) {
-    for my $src ($g2->shadowed_by_or_self($_->[0])) {
-      for my $dst ($g2->shadowed_by_or_self($_->[1])) {
-        push @new_edges, [ $src, $dst ];
-      }
-    }
-  }
-
-  $subgraph->add_edges(
-    @new_edges
-  );
-
-  return $subgraph;
-}
-
-sub _replace_if_fi_by_unmodified_dfa_vertices {
+sub _new_cond {
   my ($g2, $if) = @_;
 
   die unless $g2->is_if_vertex($if);
@@ -160,47 +183,30 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
   my (undef, $if1, $if2, $fi2, $fi1, $fi) =
     $g2->conditionals_from_if($if);
 
-  my $subgraph = _find_subgraph_between($g2, $if, $fi);
+  my $op = $g2->vp_name($if);
 
-  my $json = JSON->new->canonical(1)->ascii(1)->indent(0);
+  my $subgraph = _shadowed_subgraph_between($g2, $if, $fi);
 
   for my $v ($subgraph->vertices) {
     next unless $g2->is_if_vertex($v);
     next if $v eq $if;
     warn "FIXME: hmm if in if? found $v between $if and $fi";
-    return;
-
-    $g2->g->{dbh}->do(q{
-      CREATE TABLE IF NOT EXISTS _debug AS
-      SELECT
-        0 AS src_pos,
-        json_extract(each.value, '$[0]') AS src_vertex,
-        0 AS dst_pos,
-        json_extract(each.value, '$[1]') AS dst_vertex
-      FROM
-        json_each(?) each
-    }, {}, $json->encode([ $subgraph->edges ]));
-
-    return;
+#    return;
   }
+
+  my $if1_regular = not grep {
+    ($g2->vp_self_loop($_) // '') eq 'irregular'
+  } graph_vertices_between($subgraph, $if1, $fi1);
+
+  my $if2_regular = not grep {
+    ($g2->vp_self_loop($_) // '') eq 'irregular'
+  } graph_vertices_between($subgraph, $if2, $fi2);
 
   my $automata = Grammar::Graph2::Automata->new(
     base_graph => $g2,
   );
 
   my ($d, $start_id) = $automata->subgraph_automaton($subgraph, $if);
-
-  my $op = $g2->vp_name($if);
-
-  # TODO: ...
-
-  my $if1_regular = not grep {
-    $g2->vp_self_loop($_) eq 'irregular'
-  } graph_vertices_between($subgraph, $if1, $fi1);
-
-  my $if2_regular = not grep {
-    $g2->vp_self_loop($_) eq 'irregular'
-  } graph_vertices_between($subgraph, $if2, $fi2);
 
   my @accepting = $d->cleanup_dead_states(sub {
     my %set = map { $_ => 1 } @_;
@@ -226,37 +232,84 @@ sub _replace_if_fi_by_unmodified_dfa_vertices {
     return $set{$fi};
   });
 
-  my ($src, $dst) = $automata
-    ->_shadow_subgraph_under_automaton($subgraph, $d,
-      $if, $fi, $start_id, \@accepting);
+  my %state_to_vertex = $automata->_insert_dfa($d);
 
-  for my $v ($g2->g->vertices) {
-    last unless $if1_regular;
-    last unless $op eq '#ordered_choice';
-
-    my $shadow_edges = $g2->vp_shadowed_edges($v);
-    next unless defined $shadow_edges;
-
-    my $decoded = [ grep {
-      defined $_->[0]
-    } @{ $json->decode($shadow_edges) } ];
-
-    next unless grep {
-      $_->[0] eq $fi1 and $_->[1] eq $fi
-    } @$decoded;
-
-    my @filtered = grep {
-      not($_->[0] eq $fi2 and $_->[1] eq $fi)
-      and
-      not($_->[1] eq $fi2)
-    } @$decoded;
-
-    next if @filtered == @$decoded;
-
-    $g2->vp_shadowed_edges($v, $json->encode(\@filtered))
+  if ($op eq '#exclusion' and $if2_regular) {
+    $g2->add_shadows($g2->gp_dead_vertex(), $fi2);
   }
 
-  return 1;
+  if ($op eq '#ordered_choice' and $if1_regular) {
+    $g2->add_shadows($g2->gp_dead_vertex(), $fi2);
+  }
+
+  for my $v (values %state_to_vertex) {
+
+    # TODO: would this work?
+    last;
+
+    last unless $if1_regular;
+    last unless $op eq '#ordered_choice';
+    my $shadows = $g2->vp_shadows($v);
+    next unless defined $shadows;
+    my @shadows = @{ $g2->_json->decode($shadows) };
+    next unless grep { $_ eq $fi1 } @shadows;
+    $g2->vp_shadows($v, $g2->_json->encode([
+      grep { $_ ne $fi2 } @shadows
+    ]));
+  }
+
+  # TODO: makes no sense, wrong shadow direction
+  if (not ($if1_regular and $if2_regular)) {
+    $g2->vp_shadows($_, undef)
+      for $if, $if1, $if2, $fi2, $fi1, $fi
+  }
+
+}
+
+sub _shadowed_subgraph_between {
+  my ($g2, $start_vertex, $final_vertex) = @_;
+
+  my @edges = graph_edges_between($g2->g,
+    $start_vertex, $final_vertex);
+
+  my @new_edges = $g2->_dbh->selectall_array(q{
+    WITH
+    vertex_shadowed_by AS (
+      SELECT 
+        CAST(each.value AS TEXT) AS vertex,
+        vertex_p.vertex AS by
+      FROM
+        vertex_property vertex_p
+          INNER JOIN json_each(vertex_p.shadows) each
+    ),
+    edge_selector AS (
+      SELECT
+        json_extract(each.value, '$[0]') AS src,
+        json_extract(each.value, '$[1]') AS dst
+      FROM
+        json_each(?) each
+    )
+    SELECT
+      COALESCE(src_shadow.by, e.src) AS src,
+      COALESCE(dst_shadow.by, e.dst) AS dst
+    FROM
+      edge_selector e
+        LEFT JOIN vertex_shadowed_by src_shadow
+          ON (src_shadow.vertex = e.src)
+        LEFT JOIN vertex_shadowed_by dst_shadow
+          ON (dst_shadow.vertex = e.dst)
+
+  }, {}, $g2->_json->encode(\@edges));
+
+  my $subgraph = Graph::Feather->new(
+    edges => \@new_edges
+  );
+
+  $subgraph->feather_delete_edges($subgraph->edges_at(
+    $g2->gp_dead_vertex
+  ));
+
+  return $subgraph;
 }
 
 #####################################################################

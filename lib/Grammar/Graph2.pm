@@ -42,6 +42,11 @@ sub BUILD {
 #####################################################################
 #
 #####################################################################
+sub gp_dead_vertex { 0 }
+
+#####################################################################
+#
+#####################################################################
 
 sub gp_start_vertex { _rw_graph_attribute('start_vertex', @_) }
 sub gp_final_vertex { _rw_graph_attribute('final_vertex', @_) }
@@ -110,6 +115,8 @@ sub shadowed_by_or_self {
 sub add_shadows {
   my ($self, $vertex, @vertices) = @_;
 
+  # TODO: recursion?
+
   my (undef, $combined) = $self->_dbh->selectrow_array(q{
     WITH combined AS (
       SELECT
@@ -132,6 +139,10 @@ sub add_shadows {
       json_group_array(shadows) AS shadows
     FROM
       combined
+    WHERE
+      shadows NOT IN (SELECT attribute_value FROM graph_attribute WHERE attribute_name = 'start_vertex')
+      AND
+      shadows NOT IN (SELECT attribute_value FROM graph_attribute WHERE attribute_name = 'final_vertex')
     GROUP BY
       vertex
   }, {}, $vertex, $vertex, $self->_json->encode(\@vertices));

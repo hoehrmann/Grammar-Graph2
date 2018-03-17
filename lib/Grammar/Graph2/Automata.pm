@@ -117,17 +117,28 @@ sub _insert_dfa {
     SELECT 1 + MAX(0 + vertex_name) FROM Vertex;
   });
 
+  $d->_dbh->do(q{
+    DROP TABLE IF EXISTS TConfiguration;
+  });
+  $d->_dbh->do(q{
+    CREATE TABLE TConfiguration AS
+      SELECT * FROM Configuration ORDER BY vertex;
+  });
+  $d->_dbh->do(q{
+    CREATE INDEX idx_tconfiguration_vertex ON TConfiguration(vertex);
+  });
+
   my $tr_sth = $d->_dbh->prepare(q{
     SELECT
-      (SELECT MAX(rowid) FROM state) + MIN(tr.rowid) AS vertex,
+      (SELECT MAX(rowid) FROM state) + MIN(m.rowid) AS vertex,
       tr.src AS src_state,
       json_group_array(m.vertex) AS terminals,
       tr.dst AS dst_state
     FROM
       Transition tr
-        INNER JOIN Configuration src_cfg
+        INNER JOIN TConfiguration src_cfg
           ON (tr.src = src_cfg.state)
-        INNER JOIN Configuration dst_cfg
+        INNER JOIN TConfiguration dst_cfg
           ON (tr.dst = dst_cfg.state)
         INNER JOIN Edge e
           ON (e.src = src_cfg.vertex AND e.dst = dst_cfg.vertex)
@@ -152,6 +163,7 @@ sub _insert_dfa {
     );
 
     $self->base_graph->vp_type($base_id + $via, 'Input');
+    $self->base_graph->vp_name($base_id + $via, '#dfaTransition');
     $self->base_graph->add_shadows($base_id + $via,
       @$terminals);
 
@@ -185,6 +197,7 @@ sub _insert_dfa {
   while (my $row = $st_sth->fetchrow_arrayref) {
     my ($state_id, $shadowed) = @$row;
     $self->base_graph->vp_type($base_id + $state_id, 'empty');
+    $self->base_graph->vp_name($base_id + $state_id, '#dfaState');
     $self->base_graph->add_shadows($base_id + $state_id,
         @{ $self->_json->decode($shadowed) });
   }

@@ -46,13 +46,35 @@ sub mega {
   my $g2 = $self->base_graph;
 
   my @edges = $dbh->selectall_array(q{
-    WITH stop_vertex(v) AS (
+    WITH
+    vertex_shadowed_by AS (
+      SELECT 
+        CAST(each.value AS TEXT) AS vertex,
+        vertex_p.vertex AS by
+      FROM
+        vertex_property vertex_p
+          INNER JOIN json_each(vertex_p.shadows) each
+    ),
+    edge_selector AS (
+      SELECT * FROM Edge
+    ),
+    edge_shadowed_by_or_self AS (
+      SELECT
+        COALESCE(src_shadow.by, e.src) AS src,
+        COALESCE(dst_shadow.by, e.dst) AS dst
+      FROM
+        edge_selector e
+          LEFT JOIN vertex_shadowed_by src_shadow
+            ON (src_shadow.vertex = e.src)
+          LEFT JOIN vertex_shadowed_by dst_shadow
+            ON (dst_shadow.vertex = e.dst)
+    ),
+    stop_vertex(v) AS (
       SELECT
         vertex AS v
       FROM
         vertex_property
       WHERE
-        -- TODO: maybe make all DFA-vertices stop vertices?
         type IN ('If', 'If1', 'If2', 'Fi2', 'Fi1', 'Fi')
         OR
         self_loop <> 'no'
@@ -63,8 +85,8 @@ sub mega {
                      IN ('start_vertex', 'final_vertex'))
     )
     SELECT 
-      Edge.src AS src,
-      Edge.dst AS dst,
+      e.src AS src,
+      e.dst AS dst,
       CASE
       WHEN src_p.v IS NULL AND dst_p.v IS NULL THEN 'between'
       WHEN src_p.v IS NULL AND dst_p.v IS NOT NULL THEN 'rhs'
@@ -72,11 +94,11 @@ sub mega {
       ELSE ''
       END AS type
     FROM
-      Edge
+      edge_shadowed_by_or_self e
         LEFT JOIN stop_vertex src_p
-          ON (src_p.v = Edge.src)
+          ON (src_p.v = e.src)
         LEFT JOIN stop_vertex dst_p
-          ON (dst_p.v = Edge.dst)
+          ON (dst_p.v = e.dst)
   });
 
   my @start_vertices = uniq map {
