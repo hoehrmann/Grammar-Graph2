@@ -56,7 +56,7 @@ sub subgraph_automaton {
   my ($self, $subgraph, @start_vertices) = @_;
 
 #  my $db_name = ':memory:';
-  my $db_name = 'MATA-DFA.sqlite';
+  my $db_name = ':memory:';
   unlink $db_name;
 
   my $intspan_for_runlist = memoize(sub {
@@ -106,12 +106,17 @@ sub subgraph_automaton {
   }
 
   $self->_log->debugf("Done computing transitions");
+  $d->_dbh->sqlite_backup_to_file('MATA-DFA.sqlite');
 
   return ($d, @start_ids);
 }
 
 sub _insert_dfa {
   my ($self, $d) = @_;
+
+  my $guid = sprintf '%08x', int(rand( 2**31 ));
+
+  $self->_log->debugf('Inserting DFA, guid %s', $guid);
 
   my ($base_id) = $self->base_graph->g->{dbh}->selectrow_array(q{
     SELECT 1 + MAX(0 + vertex_name) FROM Vertex;
@@ -130,9 +135,10 @@ sub _insert_dfa {
 
   my $tr_sth = $d->_dbh->prepare(q{
     SELECT
-      (SELECT MAX(rowid) FROM state) + MIN(m.rowid) AS vertex,
+      (SELECT MAX(rowid) FROM state) * tr.src + tr.dst AS vertex,
       tr.src AS src_state,
-      json_group_array(m.vertex) AS terminals,
+      json_group_array(m.input) AS first_ords,
+      json_group_array(m.vertex) AS vertices,
       tr.dst AS dst_state
     FROM
       Transition tr
@@ -153,9 +159,13 @@ sub _insert_dfa {
 
   my %cache;
   while (my $row = $tr_sth->fetchrow_arrayref) {
-    my ($via, $src, $terminals, $dst) = @$row;
+    my ($via, $src, $first_ords, $vertices, $dst) = @$row;
 
-    $terminals = $self->_json->decode( $terminals );
+    $self->_log->debugf('#dfaTransition: %s', join ' ',
+      $base_id + $via, $base_id + $src, $vertices, $base_id + $dst );
+
+    $vertices = $self->_json->decode( $vertices );
+    $first_ords = $self->_json->decode( $first_ords );
 
     $self->base_graph->g->add_edges(
       [ $base_id + $src, $base_id + $via ],
@@ -163,13 +173,14 @@ sub _insert_dfa {
     );
 
     $self->base_graph->vp_type($base_id + $via, 'Input');
-    $self->base_graph->vp_name($base_id + $via, '#dfaTransition');
+    $self->base_graph->vp_name($base_id + $via, "#dfaTransition:$guid");
+    $self->base_graph->vp_shadow_group($base_id + $via, "$base_id");
     $self->base_graph->add_shadows($base_id + $via,
-      @$terminals);
+      @$vertices);
 
     my @run_lists = uniq(map {
-      $self->base_graph->vp_run_list($_)
-    } uniq( @$terminals ));
+      $self->alphabet->_ord_to_list()->{$_}
+    } uniq( @$first_ords ));
 
     my $encoded = $self->_json->encode(\@run_lists);
     $cache{ $encoded } //= Set::IntSpan->new(@run_lists);
@@ -179,27 +190,46 @@ sub _insert_dfa {
   }
 
   my $st_sth = $d->_dbh->prepare(q{
+    WITH base AS (
+      SELECT
+        c1.state AS state,
+        json_group_array(c1.vertex) AS vertices
+      FROM
+        Configuration c1
+          INNER JOIN Vertex vertex_p
+            ON (c1.vertex = vertex_p.value
+              AND vertex_p.is_nullable
+              )
+      GROUP BY
+        c1.state
+    )
     SELECT
-      c1.state AS src_state,
-      json_group_array(c1.vertex) AS vertices
+      s.state_id,
+      base.vertices
     FROM
-      Configuration c1
-        INNER JOIN Vertex vertex_p
-          ON (c1.vertex = vertex_p.value)
-    WHERE
-      vertex_p.is_nullable
-    GROUP BY
-      c1.vertex
+      State s
+        LEFT JOIN base
+          ON (base.state = s.state_id)
   });
 
   $st_sth->execute();
 
   while (my $row = $st_sth->fetchrow_arrayref) {
     my ($state_id, $shadowed) = @$row;
+    $shadowed //= '[]';
+    $self->_log->debugf("creating dfa state %u vertex %u shadowing %s", $state_id, $base_id + $state_id, $shadowed);
     $self->base_graph->vp_type($base_id + $state_id, 'empty');
-    $self->base_graph->vp_name($base_id + $state_id, '#dfaState');
+    $self->base_graph->vp_name($base_id + $state_id, "#dfaState:$state_id:$guid");
+    $self->base_graph->vp_shadow_group($base_id + $state_id, "$base_id");
+
+#die "TRYING TO SHADOW INPUT VERTEX" if grep { $self->base_graph->is_input_vertex($_) } @{ $self->_json->decode($shadowed) };
+
     $self->base_graph->add_shadows($base_id + $state_id,
         @{ $self->_json->decode($shadowed) });
+
+    $self->base_graph->vp_shadows($base_id + $state_id, '[]')
+      unless defined $self->base_graph->vp_shadows($base_id + $state_id);
+
   }
 
   my ($max_state) = $d->_dbh->selectrow_array(q{
@@ -229,6 +259,7 @@ sub _shadow_subgraph_under_automaton {
   );
 
   # FIXME: needs to add, not replace:
+...;
   $self->base_graph
     ->vp_shadows($state_to_vertex{$start_id}, $start_vertex);
   $self->base_graph

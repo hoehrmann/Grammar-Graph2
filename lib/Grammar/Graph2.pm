@@ -66,6 +66,7 @@ sub vp_self_loop      { _rw_vertex_attribute('self_loop',     @_) }
 sub vp_topo           { _rw_vertex_attribute('topo',          @_) }
 sub vp_epsilon_group  { _rw_vertex_attribute('epsilon_group', @_) }
 sub vp_stack_group    { _rw_vertex_attribute('stack_group',   @_) }
+sub vp_shadow_group   { _rw_vertex_attribute('shadow_group',  @_) }
 
 #####################################################################
 #
@@ -95,6 +96,11 @@ sub is_epsilon_vertex  { not is_terminal_vertex(@_) }
 #####################################################################
 #
 #####################################################################
+sub is_shadowed {
+  my ($self, $v) = @_;
+  return scalar grep { $_ ne $v } $self->shadowed_by_or_self($v);
+}
+
 sub shadowed_by_or_self {
   my ($self, $v) = @_;
 
@@ -105,7 +111,7 @@ sub shadowed_by_or_self {
       vertex_property vertex_p
         INNER JOIN json_each(vertex_p.shadows) each
     WHERE
-      each.value = CAST(? AS INT) -- FIXME
+      CAST(each.value AS TEXT) = CAST(? AS TEXT) -- FIXME
     }, {}, $v);
 
   return $v unless @by;
@@ -121,7 +127,7 @@ sub add_shadows {
     WITH combined AS (
       SELECT
         vertex_p.vertex AS vertex,
-        each.value AS shadows
+        CAST(each.value AS TEXT) AS shadows
       FROM
         vertex_property vertex_p
           INNER JOIN json_each(vertex_p.shadows) each
@@ -130,7 +136,7 @@ sub add_shadows {
       UNION
       SELECT
         ? AS vertex,
-        each.value AS shadows
+        CAST(each.value AS TEXT) AS shadows
       FROM
         json_each(?) each
     )
@@ -151,6 +157,60 @@ sub add_shadows {
 
 }
 
+sub flatten_shadows {
+  my ($self) = @_;
+
+  $self->_dbh->do(q{
+    WITH RECURSIVE
+    vertex_shadows AS (
+      SELECT
+        vertex_p.vertex AS vertex,
+        CAST(each.value AS TEXT) AS shadows
+      FROM
+        vertex_property vertex_p
+          INNER JOIN json_each(vertex_p.shadows) each
+    ),
+    rec AS (
+      SELECT
+        *
+      FROM
+        vertex_shadows
+      UNION
+      SELECT
+        rec.vertex AS vertex,
+        vs.shadows AS shadows
+      FROM
+        rec
+          INNER JOIN vertex_shadows vs
+            ON (vs.vertex = rec.shadows)
+    ),
+    root_leaf AS (
+      SELECT
+        *
+      FROM
+        rec
+      WHERE
+        vertex NOT IN (SELECT shadows FROM vertex_shadows)
+        AND
+        shadows NOT IN (SELECT vertex FROM vertex_shadows)
+    ),
+    new_shadows AS (
+      SELECT
+        vertex,
+        json_group_array(shadows) AS shadows
+      FROM
+        root_leaf
+      GROUP BY
+        vertex
+    )
+    UPDATE
+      vertex_property
+    SET
+      shadows = (SELECT shadows
+                 FROM new_shadows
+                 WHERE vertex_property.vertex = new_shadows.vertex)
+  });
+}
 
 #####################################################################
 #
@@ -279,7 +339,8 @@ sub from_grammar_graph {
       self_loop DEFAULT 'no',
       topo,
       epsilon_group,
-      stack_group
+      stack_group,
+      shadow_group
     );
   });
 
