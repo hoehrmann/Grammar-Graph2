@@ -160,6 +160,8 @@ sub add_shadows {
 sub flatten_shadows {
   my ($self) = @_;
 
+return;
+
   $self->_dbh->do(q{
     WITH RECURSIVE
     vertex_shadows AS (

@@ -42,22 +42,24 @@ sub _init {
     base_graph => $self,
   )->mega if 0;
 
-#  $self->flatten_shadows();
+  $self->flatten_shadows();
 
   $self->_log->debug('done mega');
 
   $self->_replace_conditionals();
   $self->_log->debug('done _replace_conditionals');
 
+#  $self->g->feather_delete_edges(map { $self->g->edges_at($_) } grep {
+#    $self->is_fi2_vertex($_) and $self->vp_name($_) eq '#exclusion'
+#  } $self->g->vertices);
+
 #$self->_create_vertex_spans();
 #$self->_log->debug('done creating spans');
 #return;
 
 #  $self->_cover_root();
+  $self->flatten_shadows();
   $self->_log->debug('done cover root');
-
-
-
 
   my @new_edges = _shadowed_subgraph_between($self,
     $self->gp_start_vertex, $self->gp_final_vertex)->edges;
@@ -190,6 +192,8 @@ sub _new_cond {
 
   my $subgraph = _shadowed_subgraph_between($g2, $if, $fi);
 
+#warn join " -> ", @$_ for $subgraph->edges;
+
   for my $v ($subgraph->vertices) {
     next unless $g2->is_if_vertex($v);
     next if $v eq $if;
@@ -214,6 +218,7 @@ sub _new_cond {
   $d->_dbh->sqlite_backup_to_file("COND.$if.sqlite");
 
   my @accepting = $d->cleanup_dead_states(sub {
+
     my %set = map { $_ => 1 } @_;
 
     if ($op eq '#ordered_choice') {
@@ -292,6 +297,18 @@ sub _shadowed_subgraph_between {
   my @edges = graph_edges_between($g2->g,
     $start_vertex, $final_vertex);
 
+=pod
+
+warn "+inputs:";
+warn "input v $_" for grep { $g2->is_input_vertex($_) } map { @$_ } @edges;
+warn "-inputs";
+
+warn "+edges:";
+warn "edge @$_" for @edges;
+warn "-edges";
+
+=cut
+
   my @todo_edges = @edges;
   my %seen_edge;
   my @new_edges;
@@ -305,8 +322,8 @@ push @todo_edges, [ $s, $_ ] for $g2->g->successors($s);
 
       for my $d ($g2->shadowed_by_or_self($dst)) {
 
+# FIXME: this takes vertices it should not
 push @todo_edges, [ $_, $d ] for $g2->g->predecessors($d);
-
 
         push @todo_edges, [ $s, $d ];
 
@@ -357,7 +374,10 @@ push @todo_edges, [ $_, $d ] for $g2->g->predecessors($d);
     }
   }
 
+#warn "onput v $_" for grep { $g2->is_input_vertex($_) } map { @$_ } @new_edges;
+
   my $subgraph = Graph::Feather->new(
+#    edges => \@edges,
     edges => \@new_edges
   );
 

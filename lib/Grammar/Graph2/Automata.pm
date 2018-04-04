@@ -116,6 +116,8 @@ sub _insert_dfa {
 
   my $guid = sprintf '%08x', int(rand( 2**31 ));
 
+  $d->_dbh->sqlite_backup_to_file($guid . '.sqlite');
+
   $self->_log->debugf('Inserting DFA, guid %s', $guid);
 
   my ($base_id) = $self->base_graph->g->{dbh}->selectrow_array(q{
@@ -231,6 +233,25 @@ sub _insert_dfa {
       unless defined $self->base_graph->vp_shadows($base_id + $state_id);
 
   }
+
+  my @unreachable = map { @$_ } $d->_dbh->selectall_array(q{
+    SELECT
+      value
+    FROM
+      Vertex
+    WHERE
+      1 OR Vertex.is_nullable
+    EXCEPT
+    SELECT
+      vertex
+    FROM
+      TConfiguration
+  });
+
+  $self->_log->debugf("%s", Dump { unreachable => \@unreachable });
+
+#  $self->base_graph->add_shadows($base_id + $d->dead_state_id,
+#    @unreachable);
 
   my ($max_state) = $d->_dbh->selectrow_array(q{
     SELECT MAX(state_id) FROM State;

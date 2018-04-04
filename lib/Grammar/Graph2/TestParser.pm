@@ -282,7 +282,7 @@ sub _create_grammar_input_cross_product {
 sub _update_shadowed_testparser_all_edges {
   my ($self) = @_;
 
-# return;
+#return;
 
   $self->_dbh->do(q{
     CREATE TABLE vertex_shadows_or_self AS 
@@ -325,8 +325,12 @@ sub _update_shadowed_testparser_all_edges {
     WITH RECURSIVE
     to_insert AS (
       SELECT * FROM testparser_all_edges
+/*
       UNION
-      SELECT src_pos, src_vertex, src_pos, src_vertex FROM testparser_all_edges INNER JOIN vertex_property ON (vertex_property.vertex = testparser_all_edges.src_vertex AND vertex_property.type <> 'InputXXX')
+      SELECT src_pos, src_vertex, src_pos, src_vertex FROM testparser_all_edges INNER JOIN vertex_property ON (vertex_property.vertex = testparser_all_edges.src_vertex AND vertex_property.type <> 'Input')
+      UNION
+      SELECT src_pos, src_vertex, src_pos+1, src_vertex FROM testparser_all_edges INNER JOIN vertex_property ON (vertex_property.vertex = testparser_all_edges.src_vertex AND vertex_property.type = 'Input')
+*/
 /*
       UNION
       SELECT dst_pos, dst_vertex, dst_pos, dst_vertex FROM testparser_all_edges
@@ -339,15 +343,27 @@ sub _update_shadowed_testparser_all_edges {
         old_edge.dst AS dst_vertex
       FROM
         to_insert a
+          INNER JOIN vertex_property src_p
+            ON (src_p.vertex = a.src_vertex)
           LEFT JOIN vertex_shadows_or_self src_shadow
             ON (src_shadow.vertex = a.src_vertex)
 
           LEFT JOIN old_edge
             ON (src_shadow.shadows = old_edge.src)
+
+          LEFT JOIN vertex_property old_src_p
+            ON (old_src_p.vertex = old_edge.src)
+
 /*
           LEFT JOIN vertex_shadows_or_self dst_shadow
             ON (dst_shadow.vertex = a.dst_vertex)
+
 */
+/*
+      WHERE
+        old_src_p.type <> 'Input'
+*/
+
     )
 /*
     SELECT * FROM to_insert WHERE src_pos = 3 AND src_vertex = '416' --AND dst_pos = 3 
@@ -358,15 +374,30 @@ sub _update_shadowed_testparser_all_edges {
       new.*
     FROM
       to_insert new
+/*
         INNER JOIN old_edge o
           ON (new.src_vertex = o.src AND new.dst_vertex = o.dst)
+*/
   });
 
   $self->_dbh->do(q{
     DELETE FROM testparser_all_edges
     WHERE
-      src_pos = dst_pos AND EXISTS (SELECT 1 FROM vertex_property WHERE vertex = testparser_all_edges.src_vertex AND type = 'Input')
-  }) if 1;
+      dst_pos <= (SELECT MAX(rowid) FROM testparser_input)
+      AND
+      dst_vertex = (SELECT attribute_value FROM graph_attribute WHERE attribute_name = 'final_vertex')
+  });
+
+  $self->_dbh->do(q{
+    DELETE FROM testparser_all_edges
+    WHERE
+      src_pos = dst_pos
+      AND
+      EXISTS (SELECT 1
+              FROM vertex_property
+              WHERE vertex = testparser_all_edges.src_vertex
+                AND type = 'Input')
+  }) if 0; # @
 
   $self->_dbh->do(q{
     DELETE FROM testparser_all_edges
@@ -375,7 +406,7 @@ sub _update_shadowed_testparser_all_edges {
                   FROM old_edge o
                   WHERE o.src = testparser_all_edges.src_vertex
                     AND o.dst = testparser_all_edges.dst_vertex)
-  }) if 1;
+  }) if 1; # @
 
   $self->_dbh->do(q{
     WITH good_rowids AS (
@@ -411,11 +442,28 @@ sub _update_shadowed_testparser_all_edges {
               ON (i.pos = testparser_all_edges.src_pos AND i.ord >= s.min AND i.ord <= s.max)
 
       )
-  }) if 0;
+  }) if 0; # @
 
   $self->_dbh->do(q{
     DROP TABLE vertex_shadows_or_self
   });
+
+
+
+
+
+
+
+
+
+
+
+
+$self->_dbh->do(q{
+  DELETE FROM testparser_all_edges WHERE EXISTS (SELECT 1 FROM vertex_property WHERE vertex IN (testparser_all_edges.src_vertex) AND name LIKE '%#dfa%')
+}) if 0;
+
+
 
 }
 
@@ -642,14 +690,18 @@ sub _create_trees_bottom_up {
               AND src_p.p1 = if1fi.src_vertex
               AND left_.src_pos = if1fi.src_pos
               AND right_.dst_pos = if1fi.dst_pos
-              /*AND left_p.p2fi = if1fi.dst_vertex*/)
+                    --  AND left_p.p2fi = if1fi.dst_vertex
+--                        AND src_p.p2 = if1fi.dst_vertex
+              )
 
           LEFT JOIN t if2fi
             ON (src_p.type = "If"
               AND src_p.p2 = if2fi.src_vertex
               AND left_.src_pos = if2fi.src_pos
               AND right_.dst_pos = if2fi.dst_pos
-              /*AND left_p.p2fi = if2fi.dst_vertex*/)
+                    --  AND left_p.p2fi = if2fi.dst_vertex
+--                        AND src_p.p2 = if2fi.dst_vertex
+              )
 
           LEFT JOIN t pog -- parent of group
             ON (pog.dst_pos = left_.src_pos
