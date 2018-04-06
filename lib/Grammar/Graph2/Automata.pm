@@ -99,7 +99,7 @@ sub subgraph_automaton {
     $d->find_or_create_state_id( $_ )
   } @start_vertices;
 
-  $self->_log->debugf("About to start computing transitions");
+  $self->_log->debugf("About to start computing transitions, start_ids %s", "@start_ids");
 
   while (my $count = $d->compute_some_transitions(2**17)) {
     $self->_log->debugf("Computed %u transitions", $count);

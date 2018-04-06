@@ -68,13 +68,14 @@ sub _init {
 
   $self->_log->debug('done computing new edges');
 
-  $self->g->feather_delete_edges($self->g->edges);
+#  $self->g->feather_delete_edges($self->g->edges);
   $self->g->add_edges(@new_edges);
+  $self->g->feather_delete_edges(map { $self->g->edges_at($_) } grep { $self->is_shadowed($_) } $self->g->vertices);
 
   # unsure about this:
-#  my @good = graph_edges_between($self->g, $self->gp_start_vertex, $self->gp_final_vertex);
-#  $self->g->feather_delete_edges($self->g->edges);
-#  $self->g->add_edges(@good);
+  my @good = graph_edges_between($self->g, $self->gp_start_vertex, $self->gp_final_vertex);
+  $self->g->feather_delete_edges($self->g->edges);
+  $self->g->add_edges(@good);
 
   # TODO: ought to clean up shadows, otherwise joins break?
   $self->_dbh->do(q{
@@ -188,9 +189,13 @@ sub _new_cond {
   my (undef, $if1, $if2, $fi2, $fi1, $fi) =
     $g2->conditionals_from_if($if);
 
+  $g2->_log->debugf('Pre-computing If structure %s', join " ", $if, $if1, $if2, $fi2, $fi1, $fi);
+
   my $op = $g2->vp_name($if);
 
   my $subgraph = _shadowed_subgraph_between($g2, $if, $fi);
+
+  $g2->_log->debugf('  involving vertices %s', join " ", $subgraph->vertices);
 
 #warn join " -> ", @$_ for $subgraph->edges;
 
@@ -352,7 +357,11 @@ push @todo_edges, [ $_, $d ] for $g2->g->predecessors($d);
 
 =cut
 
+        my $same_shadow_group = ($g2->vp_shadow_group($d) // '') eq ($g2->vp_shadow_group($s) // '');
+        next if $same_shadow_group and not $g2->g->has_edge($s, $d);
 
+        next if ( $g2->vp_name($s) // '') =~ /^#dfaTransition/
+            and ( $g2->vp_name($d) // '') !~ /^#dfaState/;
 
         next unless $g2->g->has_edge($s, $d)
 #or $g2->g->has_edge($src, $dst)
@@ -365,7 +374,7 @@ push @todo_edges, [ $_, $d ] for $g2->g->predecessors($d);
 #            and
 #            not(defined $g2->vp_shadows($s)))
 #          or (($g2->vp_shadow_group($s) // '') ne ($g2->vp_shadow_group($d) // ''))
-          or (($g2->vp_shadow_group($d) // '') ne ($g2->vp_shadow_group($s) // ''))
+          or (not $same_shadow_group)
         ;
 
         push @new_edges, [ $s, $d ];

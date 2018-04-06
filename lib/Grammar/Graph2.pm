@@ -114,6 +114,8 @@ sub shadowed_by_or_self {
       CAST(each.value AS TEXT) = CAST(? AS TEXT) -- FIXME
     }, {}, $v);
 
+  return uniq $v, @by; # <--- recently added
+
   return $v unless @by;
   return @by;
 }
@@ -160,7 +162,7 @@ sub add_shadows {
 sub flatten_shadows {
   my ($self) = @_;
 
-return;
+#return;
 
   $self->_dbh->do(q{
     WITH RECURSIVE
