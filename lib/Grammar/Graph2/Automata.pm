@@ -250,8 +250,8 @@ sub _insert_dfa {
 
   $self->_log->debugf("%s", Dump { unreachable => \@unreachable });
 
-#  $self->base_graph->add_shadows($base_id + $d->dead_state_id,
-#    @unreachable);
+  $self->base_graph->add_shadows($base_id + $d->dead_state_id,
+    @unreachable);
 
   my ($max_state) = $d->_dbh->selectrow_array(q{
     SELECT MAX(state_id) FROM State;

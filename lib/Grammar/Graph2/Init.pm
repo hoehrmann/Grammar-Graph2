@@ -50,12 +50,20 @@ sub _init {
   $self->_log->debug('done _replace_conditionals');
 
 #  $self->g->feather_delete_edges(map { $self->g->edges_at($_) } grep {
-#    $self->is_fi2_vertex($_) and $self->vp_name($_) eq '#exclusion'
+#    $self->is_if_vertex($_) and $self->vp_name($_) eq '#exclusion'
 #  } $self->g->vertices);
 
 #$self->_create_vertex_spans();
 #$self->_log->debug('done creating spans');
 #return;
+
+#  $self->g->feather_delete_edges(grep {
+#    $self->is_shadowed($_->[0])
+#    or
+#    $self->is_shadowed($_->[1])
+#  } $self->g->edges);
+#  $self->g->feather_delete_edges(map { $self->g->edges_at($_) } grep { $self->is_shadowed($_) } $self->g->vertices);
+#    deletes too many ^
 
 #  $self->_cover_root();
   $self->flatten_shadows();
@@ -68,9 +76,9 @@ sub _init {
 
   $self->_log->debug('done computing new edges');
 
-#  $self->g->feather_delete_edges($self->g->edges);
+  $self->g->feather_delete_edges($self->g->edges);
   $self->g->add_edges(@new_edges);
-  $self->g->feather_delete_edges(map { $self->g->edges_at($_) } grep { $self->is_shadowed($_) } $self->g->vertices);
+#  $self->g->feather_delete_edges(map { $self->g->edges_at($_) } grep { $self->is_shadowed($_) } $self->g->vertices);
 
   # unsure about this:
   my @good = graph_edges_between($self->g, $self->gp_start_vertex, $self->gp_final_vertex);
@@ -254,6 +262,7 @@ sub _new_cond {
 
   # dubious
   if ($op eq '#exclusion' and $if2_regular) {
+#    $g2->add_shadows( $state_to_vertex{ $d->dead_state_id() }, $fi2 );
 #    $g2->add_shadows($g2->gp_dead_vertex(), $fi2);
 #    $g2->add_shadows($g2->gp_dead_vertex(), $fi1);
   }
@@ -296,8 +305,8 @@ sub _new_cond {
 sub _shadowed_subgraph_between {
   my ($g2, $start_vertex, $final_vertex) = @_;
 
-  die if $g2->is_shadowed($start_vertex);
-  die if $g2->is_shadowed($final_vertex);
+  warn "!!!!!!!!!!!!!!!!!!!!!!" if $g2->is_shadowed($start_vertex);
+  warn "!!!!!!!!!!!!!!!!!!!!!!" if $g2->is_shadowed($final_vertex);
 
   my @edges = graph_edges_between($g2->g,
     $start_vertex, $final_vertex);
@@ -327,8 +336,11 @@ push @todo_edges, [ $s, $_ ] for $g2->g->successors($s);
 
       for my $d ($g2->shadowed_by_or_self($dst)) {
 
-# FIXME: this takes vertices it should not
-push @todo_edges, [ $_, $d ] for $g2->g->predecessors($d);
+        if (($g2->vp_name($d) // '') =~ /^#dfaTransition/) {
+          push @todo_edges, [ $_, $d ] for $g2->g->predecessors($d);
+        }
+
+#push @todo_edges, [ $_, $d ] for grep { ($g2->vp_name($_) // '') =~ /^#dfaState/ } $g2->g->predecessors($d);
 
         push @todo_edges, [ $s, $d ];
 
@@ -360,8 +372,9 @@ push @todo_edges, [ $_, $d ] for $g2->g->predecessors($d);
         my $same_shadow_group = ($g2->vp_shadow_group($d) // '') eq ($g2->vp_shadow_group($s) // '');
         next if $same_shadow_group and not $g2->g->has_edge($s, $d);
 
-        next if ( $g2->vp_name($s) // '') =~ /^#dfaTransition/
-            and ( $g2->vp_name($d) // '') !~ /^#dfaState/;
+# redundant with previous test
+#        next if ( $g2->vp_name($s) // '') =~ /^#dfaTransition/
+#            and ( $g2->vp_name($d) // '') !~ /^#dfaState/;
 
         next unless $g2->g->has_edge($s, $d)
 #or $g2->g->has_edge($src, $dst)
@@ -390,11 +403,75 @@ push @todo_edges, [ $_, $d ] for $g2->g->predecessors($d);
     edges => \@new_edges
   );
 
+  my %all_vertices_that_subgraph_shadows = map { $_ => 1 } map {
+    my $v = $_;
+    grep { $_ ne $v } $g2->shadowed_by_or_self($v)
+  } $subgraph->vertices;
+
+  for my $v ($subgraph->vertices) {
+#    last;
+
+=pod
+
+    next if grep { not $subgraph->has_vertex($_) } $g2->g->predecessors($v);
+    next if grep { not $subgraph->has_vertex($_) } $g2->g->successors($v);
+    next if not $g2->is_shadowed($v);
+    next if $v eq $final_vertex;
+    next if $v eq $start_vertex;
+    next unless $all_vertices_that_subgraph_shadows{$v};
+    # v must be shadowed by something in subgraph
+
+    next if $v eq $final_vertex;
+    next if $v eq $start_vertex;
+
+    next if grep { not $g2->is_shadowed($_) } $g2->g->predecessors($v);
+    next if grep { not $g2->is_shadowed($_) } $g2->g->successors($v);
+
+    next if grep { grep { not $subgraph->has_vertex($_) } $g2->shadowed_by_or_self($_) } $g2->g->predecessors($v);
+    next if grep { grep { not $subgraph->has_vertex($_) } $g2->shadowed_by_or_self($_) } $g2->g->successors($v);
+
+    my %h = map { $_ => 1 } map { $g2->vp_shadow_group($_) // '' }
+      grep { $_ ne $v }
+      map { $g2->shadowed_by_or_self($_) } $v, $g2->g->predecessors($v);
+    warn Dump \%h;
+    next if exists $h{''};
+    next unless 1 == keys %h;
+
+=cut
+
+    my %v_shadowed_by_group = map { $_ => 1 } map { $g2->vp_shadow_group($_) // '' } $g2->shadowed_by_or_self($v);
+    my %p_shadowed_by_group = map { $_ => 1 } map { $g2->vp_shadow_group($_) // '' } map { $g2->shadowed_by_or_self($_) } $g2->g->predecessors($v);
+    $g2->_log->debugf("%s", Dump {
+      v => $v,
+      v_shadowed_by_group => \%v_shadowed_by_group,
+      p_shadowed_by_group => \%p_shadowed_by_group,
+    });
+    next unless $g2->_json->encode(\%v_shadowed_by_group) eq $g2->_json->encode(\%p_shadowed_by_group)
+      or (exists $p_shadowed_by_group{''} and 1 == keys %p_shadowed_by_group);
+    # next if $g2->_json->encode(\%v_shadowed_by_group) eq $g2->_json->encode({''=>1});
+    next unless $g2->is_shadowed($v);
+
+#    next if defined $g2->vp_shadows();
+
+#next;
+
+#    next if 1 == keys %v_shadowed_by_group;
+
+    # all predecessors are shadowed by the same shadow_group as also shadows self
+
+    $g2->_log->debugf("removing %s", $v);
+    $subgraph->delete_vertex($v);
+  }
+
 #  $subgraph->feather_delete_edges($subgraph->edges_at(
 #    $g2->gp_dead_vertex
 #  ));
 
-  return $subgraph;
+  return Graph::Feather->new(
+    edges => [
+      graph_edges_between($subgraph, $start_vertex, $final_vertex)
+    ],
+  );
     
 }
 
