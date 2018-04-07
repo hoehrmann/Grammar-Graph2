@@ -111,13 +111,10 @@ sub shadowed_by_or_self {
       vertex_property vertex_p
         INNER JOIN json_each(vertex_p.shadows) each
     WHERE
-      CAST(each.value AS TEXT) = CAST(? AS TEXT) -- FIXME
+      each.value = CAST(? AS TEXT)
     }, {}, $v);
 
-  return uniq $v, @by; # <--- recently added
-
-  return $v unless @by;
-  return @by;
+  return uniq $v, @by;
 }
 
 sub add_shadows {
