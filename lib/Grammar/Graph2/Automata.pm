@@ -154,6 +154,7 @@ sub _insert_dfa {
           ON (m.input = tr.input AND m.vertex = src_cfg.vertex)
     GROUP BY
       tr.src,
+--      m.vertex,
       tr.dst
   });
 

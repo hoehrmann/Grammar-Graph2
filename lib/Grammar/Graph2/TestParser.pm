@@ -442,7 +442,7 @@ sub _update_shadowed_testparser_all_edges {
               ON (i.pos = testparser_all_edges.src_pos AND i.ord >= s.min AND i.ord <= s.max)
 
       )
-  }) if 0; # @
+  }) if 1; # @
 
   $self->_dbh->do(q{
     DROP TABLE vertex_shadows_or_self
