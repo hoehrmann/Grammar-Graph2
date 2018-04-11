@@ -159,7 +159,7 @@ sub add_shadows {
 sub flatten_shadows {
   my ($self) = @_;
 
-return;
+#return;
 
   $self->_dbh->do(q{
     WITH RECURSIVE

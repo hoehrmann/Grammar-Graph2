@@ -44,7 +44,7 @@ sub _init {
 
   Grammar::Graph2::Megamata->new(
     base_graph => $self,
-  )->mega if 1;
+  )->mega if 0;
 
   $self->_log->debug('done mega');
 
@@ -53,6 +53,30 @@ sub _init {
 
   $self->_cover_root();
   $self->_log->debug('done cover root');
+
+  my $subgraph = _shadowed_subgraph_between($self,
+    $self->gp_start_vertex, $self->gp_final_vertex);
+
+  $self->g->feather_delete_edges($self->g->edges);
+  $self->g->add_edges( $subgraph->edges );
+
+  $self->flatten_shadows();
+
+  $self->_dbh->do(q{
+    WITH good_vertex AS (
+      SELECT src AS vertex FROM old_edge
+      UNION
+      SELECT dst FROM old_edge
+      UNION
+      SELECT src FROM edge
+      UNION
+      SELECT dst FROM edge
+    )
+    DELETE FROM
+      vertex_property
+    WHERE
+      vertex NOT IN (SELECT vertex FROM good_vertex)
+  });
 
   $self->_create_vertex_spans();
   $self->_log->debug('done creating spans');

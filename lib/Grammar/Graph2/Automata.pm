@@ -109,6 +109,11 @@ sub BUILD {
     WHERE
       src_p.type <> 'Input'
     ;
+    DROP TABLE IF EXISTS m_view_state_vertex_shadows_in;
+    CREATE TABLE  m_view_state_vertex_shadows_in AS
+    SELECT * FROM view_state_vertex_shadows_in LIMIT 0;
+    CREATE UNIQUE INDEX idx_m_view_state_vertex_shadows_in
+      ON m_view_state_vertex_shadows_in(vertex, shadows);
 
     DROP VIEW IF EXISTS view_state_vertex_shadows_out;
     CREATE VIEW view_state_vertex_shadows_out AS
@@ -166,11 +171,11 @@ sub BUILD {
           ON (state_p.vertex = state_shadows.vertex)
         INNER JOIN view_shadow_group_shadows group_shadows
           ON (state_p.shadow_group = group_shadows.shadow_group)
-        LEFT JOIN view_shadow_group_shadows foo
-          ON (foo.shadow_group = state_p.shadow_group
-            AND Edge.src = foo.shadows)
     WHERE
-      foo.shadows IS NULL
+      NOT EXISTS (SELECT 1
+                  FROM view_shadow_group_shadows foo
+                  WHERE foo.shadow_group = state_p.shadow_group
+                    AND Edge.src = foo.shadows)
     ;
 
     DROP VIEW IF EXISTS view_shadow_connections_out;
@@ -188,11 +193,11 @@ sub BUILD {
           ON (state_p.vertex = state_shadows.vertex)
         INNER JOIN view_shadow_group_shadows group_shadows
           ON (state_p.shadow_group = group_shadows.shadow_group)
-        LEFT JOIN view_shadow_group_shadows foo
-          ON (foo.shadow_group = state_p.shadow_group
-            AND Edge.dst = foo.shadows)
     WHERE
-      foo.shadows IS NULL
+      NOT EXISTS (SELECT 1 
+                  FROM view_shadow_group_shadows foo
+                  WHERE foo.shadow_group = state_p.shadow_group 
+                    AND Edge.dst = foo.shadows)
     ;
 
     DROP VIEW IF EXISTS view_shadow_connections;
@@ -434,11 +439,8 @@ sub _insert_dfa {
   my $db_utils = Grammar::Graph2::DBUtils->new(
     g => $self->base_graph);
 
-  $db_utils->view_to_table(
+  $db_utils->views_to_tables(
     'view_shadow_connections_in',
-  );
-
-  $db_utils->view_to_table(
     'view_shadow_connections_out',
   );
 

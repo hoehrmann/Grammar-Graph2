@@ -45,8 +45,14 @@ sub BUILD {
   my ($self) = @_;
 }
 
-sub view_to_table {
-  my ($self, $view_name) = @_;
+sub views_to_tables {
+  my ($self, @views) = @_;
+  my $seen = {};
+  $self->_view_to_table($_, $seen) for @views;
+}
+
+sub _view_to_table {
+  my ($self, $view_name, $seen) = @_;
 
   my $prefix = $self->table_prefix;
 
@@ -90,17 +96,15 @@ sub view_to_table {
 
   # TODO: recursion detection
 
-  # (?<!\Q$prefix\E)
-  my %seen;
   while ($view_sql =~ s/\b($view_regex)\b/$prefix$1/) {
-    next if $seen{$1}++; # only once
-    $self->view_to_table($1, "$prefix$1");
+    next if $seen->{$1}++; # only once
+    $self->_view_to_table($1, $seen);
   }
-
-#warn "GOING TO SELECT $view_sql";
 
   $self->_log->debugf('selecting now for %s, sql: %s',
     $view_name, '...');
+
+#  $self->g->_dbh->sqlite_backup_to_file($view_name . '.sqlite');
 
   $self->g->_dbh->do(qq{
     CREATE TABLE IF NOT EXISTS $quoted_table_name AS
@@ -115,7 +119,12 @@ sub view_to_table {
     ANALYZE $quoted_table_name;
   });
 
-  $self->_log->debugf('done materialising view %s', $view_name);
+  my ($row_count) = $self->g->_dbh->selectrow_array(qq{
+    SELECT COUNT(*) FROM $quoted_table_name
+  });
+
+  $self->_log->debugf('done materialising view %s (%u rows)',
+    $view_name, $row_count);
 }
 
 1;
