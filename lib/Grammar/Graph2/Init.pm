@@ -48,8 +48,11 @@ sub _init {
 
   $self->_log->debug('done mega');
 
+  $self->_log->debug('starting _replace_conditionals');
   $self->_replace_conditionals();
   $self->_log->debug('done _replace_conditionals');
+
+#  $self->flatten_shadows();
 
   $self->_cover_root();
   $self->_log->debug('done cover root');
@@ -114,9 +117,19 @@ sub _replace_conditionals {
   my $p = $self;
   my $g2 = $self;
 
+  my $db_utils = Grammar::Graph2::DBUtils->new(
+    g => $self);
+
+  $db_utils->views_to_tables(
+    'view_parent_child',
+  );
+
   my @parent_child_edges = $p->_dbh->selectall_array(q{
-    SELECT parent, child FROM view_parent_child
+    SELECT parent, child FROM m_view_parent_child
   });
+
+  # TODO: after mega parent_child_edges is very large
+  # but we don't need most of the data, find some improvement
 
   my $gx = Graph::Directed->new(
     edges => \@parent_child_edges,
