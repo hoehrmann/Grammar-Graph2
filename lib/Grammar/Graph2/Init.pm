@@ -159,7 +159,7 @@ sub _new_cond {
 
   my ($d, $start_id) = $automata->subgraph_automaton($subgraph, $if);
 
-  $d->_dbh->sqlite_backup_to_file("COND.$if.sqlite");
+#  $d->_dbh->sqlite_backup_to_file("COND.$if.sqlite");
 
   my @accepting = $d->cleanup_dead_states(sub {
 

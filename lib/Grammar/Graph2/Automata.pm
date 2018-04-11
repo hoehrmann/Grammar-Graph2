@@ -10,6 +10,7 @@ use File::Spec qw//;
 use List::UtilsBy qw/partition_by sort_by nsort_by uniq_by/;
 use List::MoreUtils qw/uniq/;
 use Grammar::Graph2::Alphabet;
+use Grammar::Graph2::DBUtils;
 use Graph::SomeUtils qw/:all/;
 use Algorithm::ConstructDFA2;
 use Set::IntSpan;
@@ -56,13 +57,18 @@ sub BUILD {
   $self->base_graph->_dbh->do(q{
     DROP VIEW IF EXISTS view_vertex_shadows;
     CREATE VIEW view_vertex_shadows AS
-    SELECT
+    SELECT DISTINCT
       vertex_p.vertex,
       each.value AS shadows
     FROM
       vertex_property vertex_p
         INNER JOIN json_each(vertex_p.shadows) each
     ;
+    DROP TABLE IF EXISTS m_view_vertex_shadows;
+    CREATE TABLE  m_view_vertex_shadows AS
+    SELECT * FROM view_vertex_shadows LIMIT 0;
+    CREATE UNIQUE INDEX idx_m_view_vertex_shadows
+      ON m_view_vertex_shadows(vertex, shadows);
 
     DROP VIEW IF EXISTS view_vertex_shadows_or_self;
     CREATE VIEW view_vertex_shadows_or_self AS
@@ -131,7 +137,7 @@ sub BUILD {
 
     DROP VIEW IF EXISTS view_shadow_group_shadows;
     CREATE VIEW view_shadow_group_shadows AS
-    SELECT
+    SELECT DISTINCT
       state_p.shadow_group AS shadow_group,
       state_shadows.shadows AS shadows
     FROM
@@ -139,10 +145,15 @@ sub BUILD {
         INNER JOIN vertex_property state_p
           ON (state_p.vertex = state_shadows.vertex)
     ;
+    DROP TABLE IF EXISTS m_view_shadow_group_shadows;
+    CREATE TABLE  m_view_shadow_group_shadows AS
+    SELECT * FROM view_shadow_group_shadows LIMIT 0;
+    CREATE UNIQUE INDEX idx_m_view_shadow_group_shadows
+      ON m_view_shadow_group_shadows(shadow_group, shadows);
 
     DROP VIEW IF EXISTS view_shadow_connections_in;
     CREATE VIEW view_shadow_connections_in AS
-    SELECT
+    SELECT DISTINCT
       Edge.src AS in_src,
       Edge.dst AS in_dst,
       Edge.src AS out_src,
@@ -164,7 +175,7 @@ sub BUILD {
 
     DROP VIEW IF EXISTS view_shadow_connections_out;
     CREATE VIEW view_shadow_connections_out AS
-    SELECT
+    SELECT DISTINCT
       Edge.src AS in_src,
       Edge.dst AS in_dst,
       state_p.vertex AS out_src,
@@ -258,7 +269,7 @@ sub _insert_dfa {
 
   my $guid = sprintf '%08x', int(rand( 2**31 ));
 
-  $d->_dbh->sqlite_backup_to_file($guid . '.sqlite');
+#  $d->_dbh->sqlite_backup_to_file($guid . '.sqlite');
 
   $self->_log->debugf('Inserting DFA, guid %s', $guid);
 
@@ -420,19 +431,30 @@ sub _insert_dfa {
       json_each(?) each
   }, {}, $self->_json->encode([ map { $state_to_vertex{$_} } @start_ids ]));
 
+  my $db_utils = Grammar::Graph2::DBUtils->new(
+    g => $self->base_graph);
+
+  $db_utils->view_to_table(
+    'view_shadow_connections_in',
+  );
+
+  $db_utils->view_to_table(
+    'view_shadow_connections_out',
+  );
+
   $self->base_graph->_dbh->do(q{
     CREATE TABLE TConnection AS
     SELECT
-      view_shadow_connections_in.*
+      m_view_shadow_connections_in.*
     FROM
-      view_shadow_connections_in
+      m_view_shadow_connections_in
         INNER JOIN TStartVertices
           ON (out_dst = TStartVertices.vertex)
     UNION
     SELECT
       *
     FROM
-      view_shadow_connections_out
+      m_view_shadow_connections_out
   });
 
   $self->base_graph->_dbh->do(q{
