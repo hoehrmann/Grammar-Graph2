@@ -50,6 +50,148 @@ sub BUILD {
     g => $self->base_graph
   ));
 
+  $self->_log->debug("Creating views");
+  local $self->base_graph
+    ->_dbh->{sqlite_allow_multiple_statements} = 1;
+  $self->base_graph->_dbh->do(q{
+    DROP VIEW IF EXISTS view_vertex_shadows;
+    CREATE VIEW view_vertex_shadows AS
+    SELECT
+      vertex_p.vertex,
+      each.value AS shadows
+    FROM
+      vertex_property vertex_p
+        INNER JOIN json_each(vertex_p.shadows) each
+    ;
+
+    DROP VIEW IF EXISTS view_vertex_shadows_or_self;
+    CREATE VIEW view_vertex_shadows_or_self AS
+    SELECT
+      view_vertex_shadows.vertex,
+      view_vertex_shadows.shadows
+    FROM
+      view_vertex_shadows
+    UNION
+    SELECT
+      vertex AS vertex,
+      vertex AS shadows
+    FROM
+      vertex_property
+    ;
+
+    DROP VIEW IF EXISTS view_state_vertex_shadows_in;
+    CREATE VIEW view_state_vertex_shadows_in AS
+    SELECT
+      view_vertex_shadows.vertex,
+      view_vertex_shadows.shadows
+    FROM
+      view_vertex_shadows
+        INNER JOIN vertex_property vertex_p
+          ON (vertex_p.vertex = view_vertex_shadows.vertex)
+    WHERE
+      vertex_p.type <> 'Input'
+    UNION
+    SELECT
+      Edge.src AS vertex,
+      dst_shadows.shadows AS shadows
+    FROM
+      Edge
+        INNER JOIN view_vertex_shadows dst_shadows
+          ON (Edge.dst = dst_shadows.vertex)
+        INNER JOIN vertex_property src_p
+          ON (Edge.src = src_p.vertex)
+    WHERE
+      src_p.type <> 'Input'
+    ;
+
+    DROP VIEW IF EXISTS view_state_vertex_shadows_out;
+    CREATE VIEW view_state_vertex_shadows_out AS
+    SELECT
+      view_vertex_shadows.vertex,
+      view_vertex_shadows.shadows
+    FROM
+      view_vertex_shadows
+        INNER JOIN vertex_property vertex_p
+          ON (vertex_p.vertex = view_vertex_shadows.vertex)
+    WHERE
+      vertex_p.type <> 'Input'
+    UNION
+    SELECT
+      Edge.dst AS vertex,
+      src_shadows.shadows AS shadows
+    FROM
+      Edge
+        INNER JOIN view_vertex_shadows src_shadows
+          ON (Edge.src = src_shadows.vertex)
+        INNER JOIN vertex_property dst_p
+          ON (Edge.dst = dst_p.vertex)
+    WHERE
+      dst_p.type <> 'Input'
+    ;
+
+    DROP VIEW IF EXISTS view_shadow_group_shadows;
+    CREATE VIEW view_shadow_group_shadows AS
+    SELECT
+      state_p.shadow_group AS shadow_group,
+      state_shadows.shadows AS shadows
+    FROM
+      view_state_vertex_shadows_in state_shadows -- in vs out irrelevant here, I think
+        INNER JOIN vertex_property state_p
+          ON (state_p.vertex = state_shadows.vertex)
+    ;
+
+    DROP VIEW IF EXISTS view_shadow_connections_in;
+    CREATE VIEW view_shadow_connections_in AS
+    SELECT
+      Edge.src AS in_src,
+      Edge.dst AS in_dst,
+      Edge.src AS out_src,
+      state_p.vertex AS out_dst
+    FROM
+      Edge
+        INNER JOIN view_state_vertex_shadows_in state_shadows
+          ON (state_shadows.shadows = Edge.dst)
+        INNER JOIN vertex_property state_p
+          ON (state_p.vertex = state_shadows.vertex)
+        INNER JOIN view_shadow_group_shadows group_shadows
+          ON (state_p.shadow_group = group_shadows.shadow_group)
+        LEFT JOIN view_shadow_group_shadows foo
+          ON (foo.shadow_group = state_p.shadow_group
+            AND Edge.src = foo.shadows)
+    WHERE
+      foo.shadows IS NULL
+    ;
+
+    DROP VIEW IF EXISTS view_shadow_connections_out;
+    CREATE VIEW view_shadow_connections_out AS
+    SELECT
+      Edge.src AS in_src,
+      Edge.dst AS in_dst,
+      state_p.vertex AS out_src,
+      Edge.dst AS out_dst
+    FROM
+      Edge
+        INNER JOIN view_state_vertex_shadows_out state_shadows
+          ON (state_shadows.shadows = Edge.src)
+        INNER JOIN vertex_property state_p
+          ON (state_p.vertex = state_shadows.vertex)
+        INNER JOIN view_shadow_group_shadows group_shadows
+          ON (state_p.shadow_group = group_shadows.shadow_group)
+        LEFT JOIN view_shadow_group_shadows foo
+          ON (foo.shadow_group = state_p.shadow_group
+            AND Edge.dst = foo.shadows)
+    WHERE
+      foo.shadows IS NULL
+    ;
+
+    DROP VIEW IF EXISTS view_shadow_connections;
+    CREATE VIEW view_shadow_connections AS
+    SELECT * FROM view_shadow_connections_in
+    UNION
+    SELECT * FROM view_shadow_connections_out
+    ;
+  });
+
 }
 
 sub subgraph_automaton {
@@ -112,7 +254,7 @@ sub subgraph_automaton {
 }
 
 sub _insert_dfa {
-  my ($self, $d) = @_;
+  my ($self, $d, @start_ids) = @_;
 
   my $guid = sprintf '%08x', int(rand( 2**31 ));
 
@@ -137,7 +279,7 @@ sub _insert_dfa {
 
   my $tr_sth = $d->_dbh->prepare(q{
     SELECT
-      (SELECT MAX(rowid) FROM state) * tr.src + tr.dst AS vertex,
+      (SELECT MAX(rowid) FROM state) * tr.src + tr.dst AS via,
       tr.src AS src_state,
       json_group_array(m.input) AS first_ords,
       json_group_array(m.vertex) AS vertices,
@@ -146,10 +288,10 @@ sub _insert_dfa {
       Transition tr
         INNER JOIN TConfiguration src_cfg
           ON (tr.src = src_cfg.state)
-        INNER JOIN TConfiguration dst_cfg
-          ON (tr.dst = dst_cfg.state)
-        INNER JOIN Edge e
-          ON (e.src = src_cfg.vertex AND e.dst = dst_cfg.vertex)
+--        INNER JOIN TConfiguration dst_cfg
+--          ON (tr.dst = dst_cfg.state)
+--        INNER JOIN Edge e
+--          ON (e.src = src_cfg.vertex AND e.dst = dst_cfg.vertex)
         INNER JOIN Match m
           ON (m.input = tr.input AND m.vertex = src_cfg.vertex)
     GROUP BY
@@ -258,9 +400,64 @@ sub _insert_dfa {
     SELECT MAX(state_id) FROM State;
   });
 
-  return map {
+  my %state_to_vertex = map {
     $_ => $base_id + $_
   } 1 .. $max_state;
+
+  $self->base_graph->_dbh->do(q{
+    DROP TABLE IF EXISTS TConnection;
+  });
+
+  $self->base_graph->_dbh->do(q{
+    DROP TABLE IF EXISTS TStartVertices;
+  });
+
+  $self->base_graph->_dbh->do(q{
+    CREATE TABLE TStartVertices AS
+    SELECT
+      CAST(each.value AS TEXT) AS vertex
+    FROM
+      json_each(?) each
+  }, {}, $self->_json->encode([ map { $state_to_vertex{$_} } @start_ids ]));
+
+  $self->base_graph->_dbh->do(q{
+    CREATE TABLE TConnection AS
+    SELECT
+      view_shadow_connections_in.*
+    FROM
+      view_shadow_connections_in
+        INNER JOIN TStartVertices
+          ON (out_dst = TStartVertices.vertex)
+    UNION
+    SELECT
+      *
+    FROM
+      view_shadow_connections_out
+  });
+
+  $self->base_graph->_dbh->do(q{
+    DELETE FROM Edge
+    WHERE
+      EXISTS (SELECT 1
+              FROM TConnection
+--                INNER JOIN vertex_property src_p ON (src_p.vertex = TConnection.in_src)
+--                INNER JOIN vertex_property dst_p ON (dst_p.vertex = TConnection.in_dst)
+              WHERE
+                in_src = Edge.src
+                AND
+                in_dst = Edge.dst)
+  }) if 1;
+
+  $self->base_graph->_dbh->do(q{
+    INSERT OR IGNORE INTO Edge(src, dst)
+    SELECT
+      out_src,
+      out_dst
+    FROM
+      TConnection
+  });
+
+  return %state_to_vertex;
 }
 
 sub _shadow_subgraph_under_automaton {

@@ -138,7 +138,7 @@ sub mega {
       vertex
   }, 'vertex');
 
-  my %state_to_vertex = $automata->_insert_dfa($d);
+  my %state_to_vertex = $automata->_insert_dfa($d, @start_ids);
 }
 
 1;

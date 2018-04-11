@@ -71,6 +71,8 @@ sub create_t {
 
   $self->_create_without_unreachable_vertices();
 
+#=pod
+
   $self->_dbh->do(q{
     DELETE FROM testparser_all_edges;
   });
@@ -81,6 +83,8 @@ sub create_t {
   # undoes _replace_conditionals
   $self->_update_shadowed_testparser_all_edges();
   $self->_create_without_unreachable_vertices();
+
+#=cut
 
   $self->_dbh->do(q{ ANALYZE });
 
@@ -746,8 +750,10 @@ sub _create_trees_bottom_up {
 
       WHEN "#exclusion" THEN
         if1fi.rowid IS NOT NULL
-        AND (right_.dst_pos - left_.src_pos) < CAST(? AS INT) -- OR: regular
-        AND if2fi.rowid IS NULL
+        AND
+        (right_.dst_pos - left_.src_pos) < CAST(? AS INT) -- OR: regular
+        AND
+        if2fi.rowid IS NULL
 
       WHEN "#ordered_choice" THEN
         middle_.src_vertex = src_p.p1
