@@ -97,6 +97,7 @@ sub _view_to_table {
   # TODO: recursion detection
 
   while ($view_sql =~ s/\b($view_regex)\b/$prefix$1/) {
+    # TODO: move to top?
     next if $seen->{$1}++; # only once
     $self->_view_to_table($1, $seen);
   }

@@ -44,26 +44,30 @@ sub _init {
 
   Grammar::Graph2::Megamata->new(
     base_graph => $self,
-  )->mega if 0;
+  )->mega if 1;
 
   $self->_log->debug('done mega');
 
   $self->_log->debug('starting _replace_conditionals');
-  $self->_replace_conditionals();
+#  $self->_replace_conditionals();
   $self->_log->debug('done _replace_conditionals');
 
 #  $self->flatten_shadows();
 
-  $self->_cover_root();
+#  $self->_cover_root();
   $self->_log->debug('done cover root');
+
+  $self->_cover_epsilons();
+  $self->_log->debug('done cover epsilons');
+
+  # TODO: What about displacement table?
+  $self->flatten_shadows();
 
   my $subgraph = _shadowed_subgraph_between($self,
     $self->gp_start_vertex, $self->gp_final_vertex);
 
   $self->g->feather_delete_edges($self->g->edges);
   $self->g->add_edges( $subgraph->edges );
-
-  $self->flatten_shadows();
 
   $self->_dbh->do(q{
     WITH good_vertex AS (
@@ -79,18 +83,165 @@ sub _init {
       vertex_property
     WHERE
       vertex NOT IN (SELECT vertex FROM good_vertex)
-  });
+  }) if 0;
 
   $self->_create_vertex_spans();
   $self->_log->debug('done creating spans');
+
+  $self->_cover_input_input_edges();
 
   $self->_dbh->do(q{ ANALYZE });
   return;
 }
 
+sub _cover_input_input_edges {
+  my ($self) = @_;
+
+  $self->_dbh->do(q{
+    DROP VIEW IF EXISTS view_input_input_edges
+  });
+
+  $self->_dbh->do(q{
+    CREATE VIEW view_input_input_edges AS
+    SELECT
+      Edge.rowid AS rowid,
+      Edge.src AS src,
+      Edge.dst AS dst
+    FROM
+      Edge
+        INNER JOIN vertex_property src_p
+          ON (src_p.vertex = Edge.src)
+        INNER JOIN vertex_property dst_p
+          ON (dst_p.vertex = Edge.dst)
+    WHERE
+      src_p.type = 'Input'
+      AND
+      dst_p.type = 'Input'
+  });
+
+  my @new_epsilons = $self->_dbh->selectall_array(q{
+    SELECT
+      max_vertex.vertex + ii.rowid AS vertex,
+      ii.src,
+      ii.dst
+    FROM
+      view_input_input_edges ii
+        INNER JOIN (SELECT
+                      MAX(vertex_name) AS vertex
+                    FROM
+                      vertex) max_vertex
+  });
+
+  $self->vp_type($_->[0], 'empty') for @new_epsilons;
+  $self->g->add_edges(map {
+    [ $_->[1], $_->[0] ],
+    [ $_->[0], $_->[2] ],
+  } @new_epsilons);
+
+  $self->g->feather_delete_edges($self->_dbh->selectall_array(q{
+    SELECT src, dst FROM view_input_input_edges
+  }));
+
+}
+
 #####################################################################
 # This stuff does not really belong here, and not with the other part
 #####################################################################
+sub _back_subst {
+  my ($self) = @_;
+
+  # v src dst
+
+  $self->_dbh->do(q{
+    CREATE TABLE back_substitution AS 
+    WITH RECURSIVE
+    foo AS (
+      SELECT
+        e.src AS vertex,
+        e.src AS src,
+        e.dst AS dst
+      FROM
+        (SELECT * FROM edge UNION SELECT * FROM old_edge) e
+      UNION
+      SELECT
+        vertex_s.shadows,
+        src_s.shadows,
+        dst_s.shadows
+      FROM
+        foo
+          INNER JOIN view_vertex_shadows_or_self vertex_s
+            ON (foo.vertex = vertex_s.vertex)
+          INNER JOIN view_vertex_shadows_or_self src_s
+            ON (foo.src = src_s.vertex)
+          INNER JOIN view_vertex_shadows_or_self dst_s
+            ON (foo.dst = dst_s.vertex)
+    )
+    SELECT DISTINCT
+      foo.*
+    FROM
+      foo
+        INNER JOIN old_edge
+          ON (old_edge.src = foo.src
+            AND old_edge.dst = foo.dst)
+        INNER JOIN edge
+          ON (edge.src = foo.vertex
+            OR edge.dst = foo.vertex)
+    WHERE
+      NOT EXISTS (SELECT 1 FROM Edge WHERE foo.src = Edge.src AND foo.dst = Edge.dst)
+  });
+
+}
+
+sub _cover_epsilons {
+  my ($g2) = @_;
+
+#  my $subgraph = _shadowed_subgraph_between($g2,
+#    $g2->gp_start_vertex, $g2->gp_final_vertex);
+
+  my $automata = Grammar::Graph2::Automata->new(
+    base_graph => $g2,
+  );
+
+  my @foo = $g2->_dbh->selectall_array(q{
+    WITH
+    start_vertex AS (
+      SELECT attribute_value AS vertex
+      FROM graph_attribute
+      WHERE attribute_name = 'start_vertex'
+    )
+    SELECT DISTINCT
+      json_group_array(lhs_e.e_reachable) AS epsilons
+--    ,  src_p.vertex AS root
+    FROM
+      vertex_property src_p
+        INNER JOIN Edge 
+          ON (src_p.vertex = Edge.src)
+        INNER JOIN view_epsilon_closure lhs_e
+          ON (Edge.dst = lhs_e.vertex)
+        INNER JOIN vertex_property dst_p
+          ON (lhs_e.e_reachable = dst_p.vertex)
+        LEFT JOIN start_vertex
+          ON (src_p.vertex = start_vertex.vertex)
+    WHERE
+      (src_p.type = 'Input' OR start_vertex.vertex IS NOT NULL)
+      AND
+      dst_p.type <> 'Input'
+    GROUP BY
+      src_p.vertex
+  });
+
+  my $subgraph = Graph::Feather->new(
+    vertices => [
+      map { @{ $g2->_json->decode($_->[0]) } } @foo
+    ]
+  );
+
+  my ($d, @start_ids) = $automata->subgraph_automaton($subgraph,
+    map { $g2->_json->decode($_->[0]) } @foo );
+
+  my %state_to_vertex = $automata->_insert_dfa($d, @start_ids);
+}
+
 sub _cover_root {
   my ($g2) = @_;
 
@@ -102,7 +253,7 @@ sub _cover_root {
   );
 
   my ($d, $start_id) = $automata->subgraph_automaton($subgraph,
-    $g2->gp_start_vertex);
+    [ $g2->gp_start_vertex ]);
 
   my %state_to_vertex = $automata->_insert_dfa($d, $start_id);
 }
@@ -194,7 +345,7 @@ sub _new_cond {
     base_graph => $g2,
   );
 
-  my ($d, $start_id) = $automata->subgraph_automaton($subgraph, $if);
+  my ($d, $start_id) = $automata->subgraph_automaton($subgraph, [ $if ]);
 
 #  $d->_dbh->sqlite_backup_to_file("COND.$if.sqlite");
 

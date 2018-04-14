@@ -45,6 +45,8 @@ sub mega {
   my $dbh = $self->base_graph->_dbh;
   my $g2 = $self->base_graph;
 
+  # TODO: group start vertices by predecessor set
+
   my @edges = $dbh->selectall_array(q{
     WITH
     vertex_shadowed_by AS (
@@ -126,7 +128,8 @@ sub mega {
     base_graph => $g2,
   );
 
-  my ($d, @start_ids) = $automata->subgraph_automaton($subgraph, @start_vertices);
+  my ($d, @start_ids) = $automata->subgraph_automaton($subgraph,
+    map { [$_] } @start_vertices);
 
   my $vertex_to_states = $d->_dbh->selectall_hashref(q{
     SELECT

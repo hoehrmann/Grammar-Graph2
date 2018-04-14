@@ -65,7 +65,8 @@ sub create_t {
 
   $self->_dbh->do(q{ ANALYZE });
 
-  $self->_create_grammar_input_cross_product();
+#  $self->_create_grammar_input_cross_product();
+  $self->_create_forward();
 
   $self->_dbh->do(q{ ANALYZE });
 
@@ -288,6 +289,7 @@ sub _update_shadowed_testparser_all_edges {
 
 #return;
 
+  # TODO: there is a view for that
   $self->_dbh->do(q{
     CREATE TABLE vertex_shadows_or_self AS 
       SELECT 
@@ -317,6 +319,8 @@ sub _update_shadowed_testparser_all_edges {
   $self->_dbh->do(q{
     ANALYZE testparser_all_edges;
   }) if 1;
+
+  # TODO: do this on creation
   $self->_dbh->do(q{
     ANALYZE old_edge;
   }) if 1;
@@ -427,6 +431,7 @@ sub _update_shadowed_testparser_all_edges {
       rowid NOT IN (SELECT * FROM good_rowids)
   }) if 0;
 
+  # TODO: why is this needed
   $self->_dbh->do(q{
     DELETE FROM testparser_all_edges
     WHERE
@@ -468,6 +473,115 @@ $self->_dbh->do(q{
 }) if 0;
 
 
+
+}
+
+sub _create_forward {
+  my ($self) = @_;
+
+  $self->_dbh->do(q{
+    DROP TABLE IF EXISTS testparser_all_edges
+  });
+
+  $self->_dbh->do(q{
+    CREATE TABLE testparser_all_edges AS
+
+    WITH RECURSIVE
+    start_pos AS (
+      SELECT MIN(pos) AS pos FROM testparser_input
+    ),
+    final_pos AS (
+      SELECT MAX(pos) AS pos FROM testparser_input
+    ),
+    start_vertex AS (
+      SELECT attribute_value AS vertex
+      FROM graph_attribute
+      WHERE attribute_name = 'start_vertex'
+    ),
+    final_vertex AS (
+      SELECT attribute_value AS vertex
+      FROM graph_attribute
+      WHERE attribute_name = 'final_vertex'
+    ),
+    base AS (
+      SELECT
+        Edge.*
+      FROM
+        Edge
+          INNER JOIN start_vertex
+            ON (Edge.src = start_vertex.vertex)
+/*
+      UNION 
+      SELECT
+        n.*
+      FROM
+        Edge
+          INNER JOIN start_vertex
+          INNER JOIN Edge n
+            ON (Edge.src = start_vertex.vertex AND Edge.dst = n.src)
+      UNION
+      SELECT
+        Edge.*
+      FROM
+        Edge
+          INNER JOIN final_vertex
+            ON (Edge.dst = final_vertex.vertex)
+      UNION 
+      SELECT
+        n.*
+      FROM
+        Edge
+          INNER JOIN final_vertex
+          INNER JOIN Edge n
+            ON (Edge.dst = final_vertex.vertex AND Edge.src = n.dst)
+*/        
+    ),
+    fwd AS (
+      SELECT
+        start_pos.pos AS src_pos,
+        base.src AS src_vertex,
+        start_pos.pos AS dst_pos,
+        base.dst AS dst_vertex
+      FROM
+        base
+          INNER JOIN start_pos
+      UNION
+      SELECT
+        fwd.dst_pos AS src_pos,
+        fwd.dst_vertex AS src_vertex,
+        CASE
+        WHEN src_p.type <> 'Input' THEN fwd.dst_pos
+        ELSE fwd.dst_pos + 1
+        END AS dst_pos,
+        edge.dst AS dst_vertex
+      FROM
+        fwd
+          INNER JOIN vertex_property src_p
+            ON (src_p.vertex = fwd.dst_vertex)
+          INNER JOIN Edge 
+            ON (Edge.src = fwd.dst_vertex)
+          INNER JOIN vertex_property dst_p
+            ON (dst_p.vertex = edge.dst)
+          LEFT JOIN testparser_input i
+            ON (
+              (src_p.type <> 'Input' AND i.pos = fwd.dst_pos)
+              OR
+              (src_p.type = 'Input' AND i.pos = fwd.dst_pos + 1)
+              ) 
+          LEFT JOIN vertex_span s
+            ON (i.ord >= s.min AND i.ord <= s.max
+              AND s.vertex = edge.dst)
+      WHERE
+        dst_p.type <> 'Input' OR s.vertex is not null
+        
+    )
+    SELECT
+      *
+    FROM
+      fwd
+    ORDER BY
+      src_pos
+  });
 
 }
 

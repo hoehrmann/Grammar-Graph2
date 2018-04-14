@@ -211,7 +211,7 @@ sub BUILD {
 }
 
 sub subgraph_automaton {
-  my ($self, $subgraph, @start_vertices) = @_;
+  my ($self, $subgraph, @start_vertex_sets) = @_;
 
 #  my $db_name = ':memory:';
   my $db_name = ':memory:';
@@ -254,8 +254,8 @@ sub subgraph_automaton {
   );
 
   my @start_ids = map {
-    $d->find_or_create_state_id( $_ )
-  } @start_vertices;
+    $d->find_or_create_state_id( @$_ )
+  } @start_vertex_sets;
 
   $self->_log->debugf("About to start computing transitions, start_ids %s", "@start_ids");
 
@@ -457,6 +457,16 @@ sub _insert_dfa {
       *
     FROM
       m_view_shadow_connections_out
+  });
+
+  $self->base_graph->_dbh->do(q{
+    CREATE TABLE IF NOT EXISTS Displacement AS 
+    SELECT * FROM TConnection LIMIT 0
+  });
+
+  $self->base_graph->_dbh->do(q{
+    INSERT INTO Displacement
+    SELECT * FROM TConnection
   });
 
   $self->base_graph->_dbh->do(q{
