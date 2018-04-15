@@ -33,19 +33,33 @@ sub _init {
   );
 
   $self->_dbh->do(q{
+    DROP VIEW IF EXISTS view_start_vertex;
+    CREATE VIEW view_start_vertex AS
+    SELECT attribute_value AS vertex
+    FROM graph_attribute
+    WHERE attribute_name = 'start_vertex';
+
+    DROP VIEW IF EXISTS view_final_vertex;
+    CREATE VIEW view_final_vertex AS
+    SELECT attribute_value AS vertex
+    FROM graph_attribute
+    WHERE attribute_name = 'final_vertex';
+
     DROP TABLE IF EXISTS old_edge;
     CREATE TABLE old_edge(
       src REFERENCES Vertex(vertex_name) ON UPDATE CASCADE,
       dst REFERENCES Vertex(vertex_name) ON UPDATE CASCADE
     );
     INSERT INTO old_edge SELECT * FROM edge;
+    ANALYZE old_edge;
+    CREATE UNIQUE INDEX idx_old_edge ON old_edge(src,dst);
   });
 
   $self->_rename_vertices();
 
   Grammar::Graph2::Megamata->new(
     base_graph => $self,
-  )->mega if 1;
+  )->mega if 0;
 
   $self->_log->debug('done mega');
 
@@ -53,13 +67,12 @@ sub _init {
   $self->_replace_conditionals();
   $self->_log->debug('done _replace_conditionals');
 
-#  $self->_cover_root();
+  $self->_cover_root();
   $self->_log->debug('done cover root');
 
   $self->_cover_epsilons();
   $self->_log->debug('done cover epsilons');
 
-  # TODO: What about displacement table?
   $self->flatten_shadows();
 
   my $subgraph = _shadowed_subgraph_between($self,
@@ -135,50 +148,6 @@ sub _cover_input_input_edges {
 #####################################################################
 # This stuff does not really belong here, and not with the other part
 #####################################################################
-sub _back_subst {
-  my ($self) = @_;
-
-  # v src dst
-
-  $self->_dbh->do(q{
-    CREATE TABLE back_substitution AS 
-    WITH RECURSIVE
-    foo AS (
-      SELECT
-        e.src AS vertex,
-        e.src AS src,
-        e.dst AS dst
-      FROM
-        (SELECT * FROM edge UNION SELECT * FROM old_edge) e
-      UNION
-      SELECT
-        vertex_s.shadows,
-        src_s.shadows,
-        dst_s.shadows
-      FROM
-        foo
-          INNER JOIN view_vertex_shadows_or_self vertex_s
-            ON (foo.vertex = vertex_s.vertex)
-          INNER JOIN view_vertex_shadows_or_self src_s
-            ON (foo.src = src_s.vertex)
-          INNER JOIN view_vertex_shadows_or_self dst_s
-            ON (foo.dst = dst_s.vertex)
-    )
-    SELECT DISTINCT
-      foo.*
-    FROM
-      foo
-        INNER JOIN old_edge
-          ON (old_edge.src = foo.src
-            AND old_edge.dst = foo.dst)
-        INNER JOIN edge
-          ON (edge.src = foo.vertex
-            OR edge.dst = foo.vertex)
-    WHERE
-      NOT EXISTS (SELECT 1 FROM Edge WHERE foo.src = Edge.src AND foo.dst = Edge.dst)
-  });
-
-}
 
 sub _cover_epsilons {
   my ($g2) = @_;
@@ -191,12 +160,6 @@ sub _cover_epsilons {
   );
 
   my @foo = $g2->_dbh->selectall_array(q{
-    WITH
-    start_vertex AS (
-      SELECT attribute_value AS vertex
-      FROM graph_attribute
-      WHERE attribute_name = 'start_vertex'
-    )
     SELECT DISTINCT
       json_group_array(lhs_e.e_reachable) AS epsilons
 --    ,  src_p.vertex AS root
@@ -208,7 +171,7 @@ sub _cover_epsilons {
           ON (Edge.dst = lhs_e.vertex)
         INNER JOIN vertex_property dst_p
           ON (lhs_e.e_reachable = dst_p.vertex)
-        LEFT JOIN start_vertex
+        LEFT JOIN view_start_vertex start_vertex
           ON (src_p.vertex = start_vertex.vertex)
     WHERE
       (src_p.type = 'Input' OR start_vertex.vertex IS NOT NULL)
@@ -532,12 +495,9 @@ sub _rename_vertices {
       UNION
       SELECT dst FROM edge
       UNION
-      SELECT
-        attribute_value
-      FROM
-        graph_attribute
-      WHERE
-        attribute_name IN ('start_vertex', 'final_vertex')
+      SELECT vertex FROM view_start_vertex
+      UNION
+      SELECT vertex FROM view_final_vertex
       UNION
       SELECT
         vertex_p.vertex 

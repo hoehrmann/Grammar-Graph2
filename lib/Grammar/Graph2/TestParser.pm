@@ -169,9 +169,7 @@ sub _create_grammar_input_cross_product_idea {
       FROM
         Edge e
       WHERE
-        e.src = (SELECT attribute_value
-                 FROM graph_attribute
-                 WHERE attribute_name = 'start_vertex')
+        e.src = (SELECT vertex FROM view_start_vertex)
       UNION
       SELECT
         foo.dst_pos AS src_pos,
@@ -289,45 +287,19 @@ sub _update_shadowed_testparser_all_edges {
 
 #return;
 
-  # TODO: there is a view for that
-  $self->_dbh->do(q{
-    CREATE TABLE vertex_shadows_or_self AS 
-      SELECT 
-        vertex_p.vertex AS vertex,
-        CAST(each.value AS TEXT) AS shadows
-      FROM
-        vertex_property vertex_p
-          INNER JOIN json_each(vertex_p.shadows) each
-      UNION
-      SELECT 
-        vertex_p.vertex AS vertex,
-        vertex_p.vertex AS shadows
-      FROM
-        vertex_property vertex_p
-  });
+  local $self->_dbh->{sqlite_allow_multiple_statements} = 1;
 
   $self->_dbh->do(q{
-    CREATE UNIQUE INDEX idx_vertex_shadows_or_self
-      ON vertex_shadows_or_self(vertex, shadows)
-  });
+    CREATE TABLE t_vertex_shadows_or_self AS 
+    SELECT * FROM view_vertex_shadows_or_self;
 
-  $self->_dbh->do(q{
-    ANALYZE vertex_shadows_or_self;
-  });
+    CREATE UNIQUE INDEX idx_t_vertex_shadows_or_self
+      ON t_vertex_shadows_or_self(vertex, shadows);
 
+    ANALYZE t_vertex_shadows_or_self;
 
-  $self->_dbh->do(q{
     ANALYZE testparser_all_edges;
-  }) if 1;
-
-  # TODO: do this on creation
-  $self->_dbh->do(q{
-    ANALYZE old_edge;
-  }) if 1;
-  $self->_dbh->do(q{
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_old_edge ON old_edge(src,dst);
-  }) if 1;
-
+  });
 
   $self->_dbh->do(q{
     WITH RECURSIVE
@@ -353,7 +325,7 @@ sub _update_shadowed_testparser_all_edges {
         to_insert a
           INNER JOIN vertex_property src_p
             ON (src_p.vertex = a.src_vertex)
-          LEFT JOIN vertex_shadows_or_self src_shadow
+          LEFT JOIN t_vertex_shadows_or_self src_shadow
             ON (src_shadow.vertex = a.src_vertex)
 
           LEFT JOIN old_edge
@@ -363,7 +335,7 @@ sub _update_shadowed_testparser_all_edges {
             ON (old_src_p.vertex = old_edge.src)
 
 /*
-          LEFT JOIN vertex_shadows_or_self dst_shadow
+          LEFT JOIN t_vertex_shadows_or_self dst_shadow
             ON (dst_shadow.vertex = a.dst_vertex)
 
 */
@@ -393,7 +365,7 @@ sub _update_shadowed_testparser_all_edges {
     WHERE
       dst_pos <= (SELECT MAX(rowid) FROM testparser_input)
       AND
-      dst_vertex = (SELECT attribute_value FROM graph_attribute WHERE attribute_name = 'final_vertex')
+      dst_vertex = (SELECT vertex FROM view_final_vertex)
   });
 
   $self->_dbh->do(q{
@@ -454,7 +426,7 @@ sub _update_shadowed_testparser_all_edges {
   }) if 1; # @
 
   $self->_dbh->do(q{
-    DROP TABLE vertex_shadows_or_self
+    DROP TABLE t_vertex_shadows_or_self
   });
 
 
@@ -493,22 +465,12 @@ sub _create_forward {
     final_pos AS (
       SELECT MAX(pos) AS pos FROM testparser_input
     ),
-    start_vertex AS (
-      SELECT attribute_value AS vertex
-      FROM graph_attribute
-      WHERE attribute_name = 'start_vertex'
-    ),
-    final_vertex AS (
-      SELECT attribute_value AS vertex
-      FROM graph_attribute
-      WHERE attribute_name = 'final_vertex'
-    ),
     base AS (
       SELECT
         Edge.*
       FROM
         Edge
-          INNER JOIN start_vertex
+          INNER JOIN view_start_vertex start_vertex
             ON (Edge.src = start_vertex.vertex)
 /*
       UNION 
@@ -516,7 +478,7 @@ sub _create_forward {
         n.*
       FROM
         Edge
-          INNER JOIN start_vertex
+          INNER JOIN view_start_vertex start_vertex
           INNER JOIN Edge n
             ON (Edge.src = start_vertex.vertex AND Edge.dst = n.src)
       UNION
@@ -524,14 +486,14 @@ sub _create_forward {
         Edge.*
       FROM
         Edge
-          INNER JOIN final_vertex
+          INNER JOIN view_final_vertex final_vertex
             ON (Edge.dst = final_vertex.vertex)
       UNION 
       SELECT
         n.*
       FROM
         Edge
-          INNER JOIN final_vertex
+          INNER JOIN view_final_vertex final_vertex
           INNER JOIN Edge n
             ON (Edge.dst = final_vertex.vertex AND Edge.src = n.dst)
 */        
@@ -605,9 +567,7 @@ sub _create_without_unreachable_vertices {
       WHERE
         1 = 1
         AND e.src_pos = (SELECT MIN(rowid) FROM testparser_input)
-        AND e.src_vertex = (SELECT attribute_value
-                            FROM graph_attribute
-                            WHERE attribute_name = 'start_vertex')
+        AND e.src_vertex = (SELECT vertex FROM view_start_vertex)
 
       UNION 
       
@@ -628,9 +588,7 @@ sub _create_without_unreachable_vertices {
       WHERE
         1 = 1
         AND e.dst_pos = (SELECT 1 + MAX(rowid) FROM testparser_input)
-        AND e.dst_vertex = (SELECT attribute_value
-                            FROM graph_attribute
-                            WHERE attribute_name = 'final_vertex')
+        AND e.dst_vertex = (SELECT vertex FROM view_final_vertex)
 
       UNION
       

@@ -161,12 +161,8 @@ sub BUILD {
       WHERE
         src_pos = (SELECT MIN(rowid) FROM testparser_input)
         AND dst_pos = (SELECT 1 + MAX(rowid) FROM testparser_input)
-        AND src_vertex = (SELECT attribute_value
-                          FROM graph_attribute
-                          WHERE attribute_name = 'start_vertex')
-        AND dst_vertex = (SELECT attribute_value
-                          FROM graph_attribute
-                          WHERE attribute_name = 'final_vertex')
+        AND src_vertex = (SELECT vertex FROM view_start_vertex)
+        AND dst_vertex = (SELECT vertex FROM view_final_vertex)
 
       UNION
 

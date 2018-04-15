@@ -145,9 +145,9 @@ sub add_shadows {
     FROM
       combined
     WHERE
-      shadows NOT IN (SELECT attribute_value FROM graph_attribute WHERE attribute_name = 'start_vertex')
+      shadows NOT IN (SELECT vertex FROM view_start_vertex)
       AND
-      shadows NOT IN (SELECT attribute_value FROM graph_attribute WHERE attribute_name = 'final_vertex')
+      shadows NOT IN (SELECT vertex FROM view_final_vertex)
     GROUP BY
       vertex
   }, {}, $vertex, $vertex, $self->_json->encode(\@vertices));

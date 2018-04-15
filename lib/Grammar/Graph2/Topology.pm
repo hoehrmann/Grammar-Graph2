@@ -263,10 +263,9 @@ sub BUILD {
         OR
         self_loop <> 'no' -- TODO: 'irregular'?
         OR
-        vertex IN (SELECT attribute_value
-                   FROM graph_attribute
-                   WHERE attribute_name
-                     IN ('start_vertex', 'final_vertex'))
+        vertex IN (SELECT vertex FROM view_start_vertex
+                   UNION
+                   SELECT vertex FROM view_final_vertex)
     ),
     successors_and_self(origin, v) AS (
 

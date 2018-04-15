@@ -59,7 +59,7 @@ sub BUILD {
     CREATE VIEW view_vertex_shadows AS
     SELECT DISTINCT
       vertex_p.vertex,
-      each.value AS shadows
+      CAST(each.value AS TEXT) AS shadows
     FROM
       vertex_property vertex_p
         INNER JOIN json_each(vertex_p.shadows) each
@@ -460,16 +460,6 @@ sub _insert_dfa {
   });
 
   $self->base_graph->_dbh->do(q{
-    CREATE TABLE IF NOT EXISTS Displacement AS 
-    SELECT * FROM TConnection LIMIT 0
-  });
-
-  $self->base_graph->_dbh->do(q{
-    INSERT INTO Displacement
-    SELECT * FROM TConnection
-  });
-
-  $self->base_graph->_dbh->do(q{
     DELETE FROM Edge
     WHERE
       EXISTS (SELECT 1
@@ -492,43 +482,6 @@ sub _insert_dfa {
   });
 
   return %state_to_vertex;
-}
-
-sub _shadow_subgraph_under_automaton {
-  my ($self, $subgraph, $d, $start_vertex, $final_vertex, $start_id, $accepting) = @_;
-
-  my %state_to_vertex = $self->_insert_dfa($d);
-
-  my ($base_id) = $self->base_graph->g->{dbh}->selectrow_array(q{
-    SELECT 1 + MAX(0 + vertex_name) FROM Vertex;
-  });
-
-  my $new_final_vertex = ++$base_id;
-
-  $self->base_graph->vp_name($new_final_vertex, 'NEW_FINAL');
-
-  $self->base_graph->g->add_edges(
-    map { [ $state_to_vertex{$_}, $new_final_vertex ] } @$accepting
-  );
-
-  # FIXME: needs to add, not replace:
-...;
-  $self->base_graph
-    ->vp_shadows($state_to_vertex{$start_id}, $start_vertex);
-  $self->base_graph
-    ->vp_shadows($new_final_vertex, $final_vertex);
-
-
-  $self->base_graph->vp_shadowed_edges($new_final_vertex, '[]');
-
-  $self->base_graph->add_shadowed_edges($new_final_vertex,
-    $self->base_graph->g->edges_from($final_vertex),
-  );
-
-  $self->base_graph->add_shadowed_edges($state_to_vertex{$start_id},
-    $self->base_graph->g->edges_to($start_vertex),
-  );
-
 }
 
 1;

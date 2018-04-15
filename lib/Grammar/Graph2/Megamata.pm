@@ -81,10 +81,9 @@ sub mega {
         OR
         self_loop <> 'no'
         OR
-        vertex IN (SELECT attribute_value
-                   FROM graph_attribute
-                   WHERE attribute_name
-                     IN ('start_vertex', 'final_vertex'))
+        vertex IN (SELECT vertex FROM view_start_vertex
+                   UNION
+                   SELECT vertex FROM view_final_vertex)
     )
     SELECT 
       e.src AS src,
