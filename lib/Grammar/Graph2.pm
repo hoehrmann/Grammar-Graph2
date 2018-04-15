@@ -98,23 +98,11 @@ sub is_epsilon_vertex  { not is_terminal_vertex(@_) }
 #####################################################################
 sub is_shadowed {
   my ($self, $v) = @_;
-  return scalar grep { $_ ne $v } $self->shadowed_by_or_self($v);
-}
-
-sub shadowed_by_or_self {
-  my ($self, $v) = @_;
-
-  my @by = map { @$_ } $self->_dbh->selectall_array(q{
-    SELECT
-      vertex_p.vertex
-    FROM
-      vertex_property vertex_p
-        INNER JOIN json_each(vertex_p.shadows) each
-    WHERE
-      each.value = CAST(? AS TEXT)
-    }, {}, $v);
-
-  return uniq $v, @by;
+  return scalar $self->_dbh->selectrow_array(q{
+    SELECT 1
+    FROM view_vertex_shadows
+    WHERE shadows = CAST(? AS TEXT)
+  }, {}, $v);
 }
 
 sub add_shadows {
@@ -124,7 +112,8 @@ sub add_shadows {
 
   my (undef, $combined) = $self->_dbh->selectrow_array(q{
     WITH combined AS (
-      SELECT
+/*
+      SELECT 
         vertex_p.vertex AS vertex,
         CAST(each.value AS TEXT) AS shadows
       FROM
@@ -132,6 +121,8 @@ sub add_shadows {
           INNER JOIN json_each(vertex_p.shadows) each
       WHERE
         vertex_p.vertex = ?
+*/
+      SELECT * FROM view_vertex_shadows WHERE vertex = CAST(? AS TEXT)
       UNION
       SELECT
         ? AS vertex,
@@ -153,7 +144,6 @@ sub add_shadows {
   }, {}, $vertex, $vertex, $self->_json->encode(\@vertices));
 
   $self->vp_shadows($vertex, $combined);
-
 }
 
 sub flatten_shadows {
@@ -164,12 +154,7 @@ sub flatten_shadows {
   $self->_dbh->do(q{
     WITH RECURSIVE
     vertex_shadows AS (
-      SELECT
-        vertex_p.vertex AS vertex,
-        CAST(each.value AS TEXT) AS shadows
-      FROM
-        vertex_property vertex_p
-          INNER JOIN json_each(vertex_p.shadows) each
+      SELECT * FROM view_vertex_shadows
     ),
     rec AS (
       SELECT

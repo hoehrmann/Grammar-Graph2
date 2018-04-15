@@ -32,6 +32,10 @@ sub _init {
     g => $self,
   );
 
+  my $automata = Grammar::Graph2::Automata->new(
+    base_graph => $self,
+  );
+
   $self->_dbh->do(q{
     DROP VIEW IF EXISTS view_start_vertex;
     CREATE VIEW view_start_vertex AS
@@ -374,7 +378,7 @@ sub _new_cond {
         $fi2, $v);
 
       # FIXME: disabled due to bug
-#      next;
+      next;
 
       $g2->vp_shadows($v, $g2->_json->encode(\@cleaned));
     }

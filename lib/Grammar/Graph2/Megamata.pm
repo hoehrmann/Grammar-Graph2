@@ -51,11 +51,10 @@ sub mega {
     WITH
     vertex_shadowed_by AS (
       SELECT 
-        CAST(each.value AS TEXT) AS vertex,
-        vertex_p.vertex AS by
+        shadows AS vertex,
+        vertex AS by 
       FROM
-        vertex_property vertex_p
-          INNER JOIN json_each(vertex_p.shadows) each
+        view_vertex_shadows
     ),
     edge_selector AS (
       SELECT * FROM Edge
