@@ -39,7 +39,12 @@ sub _init {
   );
 
   $self->_dbh->do(q{
-    CREATE TABLE old_edge AS SELECT * FROM edge
+    DROP TABLE IF EXISTS old_edge;
+    CREATE TABLE old_edge(
+      src REFERENCES Vertex(vertex_name) ON UPDATE CASCADE,
+      dst REFERENCES Vertex(vertex_name) ON UPDATE CASCADE
+    );
+    INSERT INTO old_edge SELECT * FROM edge;
   });
 
   Grammar::Graph2::Megamata->new(
@@ -54,7 +59,7 @@ sub _init {
 
 #  $self->flatten_shadows();
 
-#  $self->_cover_root();
+  $self->_cover_root();
   $self->_log->debug('done cover root');
 
 #  $self->_cover_epsilons();
@@ -85,10 +90,15 @@ sub _init {
       vertex NOT IN (SELECT vertex FROM good)
   }) if 1;
 
+  $self->_cover_input_input_edges();
+
+  $self->_rename_vertices();
+
   $self->_create_vertex_spans();
   $self->_log->debug('done creating spans');
 
-  $self->_cover_input_input_edges();
+  $self->_create_input_classes();
+  $self->_log->debug('done creating input_classes');
 
   $self->_dbh->do(q{ ANALYZE });
   return;
@@ -450,6 +460,34 @@ sub _shadowed_subgraph_between {
 # This stuff does not really belong here:
 #####################################################################
 
+sub _create_input_classes {
+  my ($self) = @_;
+
+  local $self->_dbh->{sqlite_allow_multiple_statements} = 1;
+  
+  my $alphabet = Grammar::Graph2::Alphabet->new(
+    g => $self
+  );
+
+  my %h = %{ $alphabet->_ord_to_list };
+
+  my @list_of_spans = map {
+    $self->_json->encode([ Set::IntSpan->new($h{$_})->spans ])
+  } sort { $a <=> $b } keys %h;
+
+  $self->_dbh->do(q{
+    DROP TABLE IF EXISTS input_class;
+    CREATE TABLE input_class AS 
+    SELECT
+      CAST(1 + class.key AS INT) AS class,
+      CAST(json_extract(span.value, '$[0]') AS INT) AS 'min',
+      CAST(json_extract(span.value, '$[1]') AS INT) AS 'max'
+    FROM
+      json_each(?) class
+        INNER JOIN json_each(class.value) span
+  }, {}, $self->_json->encode(\@list_of_spans));
+}
+
 sub _create_vertex_spans {
   my ($self) = @_;
 
@@ -461,7 +499,7 @@ sub _create_vertex_spans {
     DROP TABLE IF EXISTS vertex_span;
 
     CREATE TABLE vertex_span(
-      vertex,
+      vertex REFERENCES Vertex(vertex_name) ON UPDATE CASCADE,
       min INTEGER,
       max INTEGER
     );
@@ -496,6 +534,61 @@ sub _create_vertex_spans {
 
 }
 
+sub _rename_vertices {
+  my ($self) = @_;
+
+  local $self->_dbh->{sqlite_allow_multiple_statements} = 1;
+
+  $self->_dbh->do(q{
+    DROP TABLE IF EXISTS rename_vertex;
+    CREATE TABLE rename_vertex AS
+    SELECT
+      Vertex.vertex_name AS vertex
+    FROM
+      Vertex
+        LEFT JOIN vertex_property vertex_p
+          ON (vertex_p.vertex = Vertex.vertex_name)
+    ORDER BY
+      1
+  });
+
+  my %map = %{ $self->_dbh->selectall_hashref(q{
+    SELECT
+      vertex,
+      rowid
+    FROM
+      rename_vertex
+  }, 'vertex') };
+
+#die Dump \%map;
+
+  for my $meth (qw/vp_shadows vp_epsilon_group/) {
+    for my $v ($self->g->vertices) {
+      my $encoded = $self->$meth($v);
+      next unless defined $encoded;
+      $self->$meth($v, $self->_json->encode([
+        map { '' . $map{$_}->{rowid} }
+          @{ $self->_json->decode($encoded) }
+      ]));
+#      warn $self->$meth($v);
+    }
+  }
+
+  $self->gp_start_vertex('' . $map{$self->gp_start_vertex()}->{rowid});
+  $self->gp_final_vertex('' . $map{$self->gp_final_vertex()}->{rowid});
+#  $self->gp_dead_vertex('' . $map{$self->gp_dead_vertex()}->{rowid})
+#    if defined $self->gp_dead_vertex();
+
+  $self->_dbh->do(q{
+    UPDATE
+      vertex
+    SET
+      vertex_name = (SELECT CAST(rowid AS TEXT)
+                     FROM rename_vertex
+                     WHERE vertex = vertex.vertex_name)
+  });
+
+}
 
 1;
 

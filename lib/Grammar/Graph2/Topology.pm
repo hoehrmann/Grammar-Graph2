@@ -320,7 +320,7 @@ sub BUILD {
         foo
           INNER JOIN vertex_property root_p
             ON (root_p.vertex = foo.root)
-          INNER JOIN old_edge Edge 
+          INNER JOIN Edge
             ON (Edge.src = foo.reachable)
       WHERE
         root_p.partner <> Edge.src
@@ -346,6 +346,8 @@ sub BUILD {
           ON (root_p.vertex = b.root)
         INNER JOIN vertex_property reachable_p
           ON (b.reachable = reachable_p.vertex)
+    WHERE
+      reachable_p.self_loop IS NOT NULL
     GROUP BY
       root_p.vertex
     ;

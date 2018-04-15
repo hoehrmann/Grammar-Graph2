@@ -257,7 +257,7 @@ sub _rw_vertex_attribute {
 
   if (@_ > 3) {
 
-#    die if $name eq 'shadows' and defined $self->vp_shadows($value);
+    $self->g->add_vertex($vertex);
 
     $self->g->{dbh}->do(q{
       INSERT OR IGNORE INTO vertex_property(vertex) VALUES(?)
@@ -326,12 +326,13 @@ sub from_grammar_graph {
 
   $dbh->do(q{
     CREATE TABLE vertex_property (
-      vertex PRIMARY KEY UNIQUE NOT NULL,
+      vertex PRIMARY KEY UNIQUE NOT NULL
+        REFERENCES Vertex(vertex_name) ON UPDATE CASCADE,
       type NOT NULL DEFAULT 'empty',
       name,
-      p1,
-      p2,
-      partner,
+      p1 REFERENCES Vertex(vertex_name) ON UPDATE CASCADE,
+      p2 REFERENCES Vertex(vertex_name) ON UPDATE CASCADE,
+      partner REFERENCES Vertex(vertex_name) ON UPDATE CASCADE,
       is_stack NOT NULL DEFAULT 0,
       is_push NOT NULL DEFAULT 0,
       is_pop NOT NULL DEFAULT 0,
@@ -351,20 +352,25 @@ sub from_grammar_graph {
 
   for my $v ($old->g->vertices) {
 
-    $self->vp_p1($v, $old->vp_p1($v))
-      if $old->g->has_vertex_attribute($v, 'p1');
+    if ($old->g->has_vertex_attribute($v, 'p1')) {
+      $self->vp_p1($v, $old->vp_p1($v));
+    }
 
-    $self->vp_p2($v, $old->vp_p2($v))
-      if $old->g->has_vertex_attribute($v, 'p2');
+    if ($old->g->has_vertex_attribute($v, 'p2')) {
+      $self->vp_p2($v, $old->vp_p2($v));
+    }
 
-    $self->vp_name($v, $old->vp_name($v))
-      if $old->g->has_vertex_attribute($v, 'name');
+    if ($old->g->has_vertex_attribute($v, 'name')) {
+      $self->vp_name($v, $old->vp_name($v));
+    }      
 
-    $self->vp_partner($v, $old->vp_partner($v))
-      if $old->g->has_vertex_attribute($v, 'partner');
+    if ($old->g->has_vertex_attribute($v, 'partner')) {
+      $self->vp_partner($v, $old->vp_partner($v));
+    }
 
-    $self->vp_run_list($v, $old->vp_run_list($v))
-      if $old->g->has_vertex_attribute($v, 'run_list');
+    if ($old->g->has_vertex_attribute($v, 'run_list')) {
+      $self->vp_run_list($v, $old->vp_run_list($v));
+    }
 
 #    $self->vp_shadows($v, $old->vp_shadows($v))
 #      if $old->g->has_vertex_attribute($v, 'shadows');
