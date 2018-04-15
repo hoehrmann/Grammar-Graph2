@@ -45,7 +45,7 @@ sub _init {
 
   Grammar::Graph2::Megamata->new(
     base_graph => $self,
-  )->mega if 0;
+  )->mega if 1;
 
   $self->_log->debug('done mega');
 
@@ -53,12 +53,10 @@ sub _init {
   $self->_replace_conditionals();
   $self->_log->debug('done _replace_conditionals');
 
-#  $self->flatten_shadows();
-
-  $self->_cover_root();
+#  $self->_cover_root();
   $self->_log->debug('done cover root');
 
-#  $self->_cover_epsilons();
+  $self->_cover_epsilons();
   $self->_log->debug('done cover epsilons');
 
   # TODO: What about displacement table?
@@ -412,6 +410,7 @@ sub _new_cond {
       $g2->_log->debugf("Removing If2 vertex %u from vertex %u",
         $fi2, $v);
 
+      # FIXME: disabled due to bug
 #      next;
 
       $g2->vp_shadows($v, $g2->_json->encode(\@cleaned));
@@ -519,6 +518,9 @@ sub _rename_vertices {
 
   local $self->_dbh->{sqlite_allow_multiple_statements} = 1;
 
+  # NOTE: this does not cover vertex_span but this method
+  # is not called after creating the vertex_span table. 
+  # It should not be difficult to make this more generic.
   $self->_dbh->do(q{
     WITH RECURSIVE 
     has_neighbours AS (
@@ -552,11 +554,6 @@ sub _rename_vertices {
   }) if 1;
 
   $self->_dbh->do(q{
-
-    -- 
---    INSERT OR IGNORE INTO Vertex(vertex_name)
---    SELECT vertex FROM vertex_property;
-
     DROP TABLE IF EXISTS t_rename_vertex;
     CREATE TABLE t_rename_vertex AS
     SELECT
@@ -605,11 +602,11 @@ sub _rename_vertices {
     for my $v ($self->g->vertices) {
       my $encoded = $self->$meth($v);
       next unless defined $encoded;
+      # NOTE: automatically removes unreferenced vertices
       $self->$meth($v, $self->_json->encode([
         map { $map{$_}->{rowid} // () }
           @{ $self->_json->decode($encoded) }
       ]));
-#      warn $self->$meth($v);
     }
   }
 
