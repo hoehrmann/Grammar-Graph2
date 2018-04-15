@@ -44,12 +44,12 @@ sub _init {
 
   Grammar::Graph2::Megamata->new(
     base_graph => $self,
-  )->mega if 1;
+  )->mega if 0;
 
   $self->_log->debug('done mega');
 
   $self->_log->debug('starting _replace_conditionals');
-#  $self->_replace_conditionals();
+  $self->_replace_conditionals();
   $self->_log->debug('done _replace_conditionals');
 
 #  $self->flatten_shadows();
@@ -57,7 +57,7 @@ sub _init {
 #  $self->_cover_root();
   $self->_log->debug('done cover root');
 
-  $self->_cover_epsilons();
+#  $self->_cover_epsilons();
   $self->_log->debug('done cover epsilons');
 
   # TODO: What about displacement table?
@@ -70,7 +70,7 @@ sub _init {
   $self->g->add_edges( $subgraph->edges );
 
   $self->_dbh->do(q{
-    WITH good_vertex AS (
+    WITH good AS (
       SELECT src AS vertex FROM old_edge
       UNION
       SELECT dst FROM old_edge
@@ -82,8 +82,8 @@ sub _init {
     DELETE FROM
       vertex_property
     WHERE
-      vertex NOT IN (SELECT vertex FROM good_vertex)
-  }) if 0;
+      vertex NOT IN (SELECT vertex FROM good)
+  }) if 1;
 
   $self->_create_vertex_spans();
   $self->_log->debug('done creating spans');
@@ -333,21 +333,27 @@ sub _new_cond {
 #    return;
   }
 
-  my $if1_regular = not grep {
-    ($g2->vp_self_loop($_) // '') eq 'irregular'
-  } graph_vertices_between($subgraph, $if1, $fi1);
+  # TODO: This should check the contents of If1/If2 for "irregular"
+  # and If1/If2 themselves for "linear" but the VIEW does not make
+  # it easy at the moment to distinguish between the two cases.
 
-  my $if2_regular = not grep {
-    ($g2->vp_self_loop($_) // '') eq 'irregular'
-  } graph_vertices_between($subgraph, $if2, $fi2);
+  my ($if1_regular) = map { $_ ne 'linear' } $g2->_dbh->selectrow_array(q{
+    SELECT self_loop
+    FROM view_contents_self_loop
+    WHERE vertex = ?
+  }, {}, $if1);
+
+  my ($if2_regular) = map { $_ ne 'linear' } $g2->_dbh->selectrow_array(q{
+    SELECT self_loop
+    FROM view_contents_self_loop
+    WHERE vertex = ?
+  }, {}, $if2);
 
   my $automata = Grammar::Graph2::Automata->new(
     base_graph => $g2,
   );
 
   my ($d, $start_id) = $automata->subgraph_automaton($subgraph, [ $if ]);
-
-#  $d->_dbh->sqlite_backup_to_file("COND.$if.sqlite");
 
   my @accepting = $d->cleanup_dead_states(sub {
 
@@ -381,46 +387,51 @@ sub _new_cond {
 
   $g2->_log->debugf("state_to_vertex: " . Dump \%state_to_vertex);
 
-  # dubious
-  if ($op eq '#exclusion' and $if2_regular) {
-#    $g2->add_shadows( $state_to_vertex{ $d->dead_state_id() }, $fi2 );
-#    $g2->add_shadows($g2->gp_dead_vertex(), $fi2);
-#    $g2->add_shadows($g2->gp_dead_vertex(), $fi1);
+  # If there is no irregular recursion between If1 and Fi1, and
+  # there is no path from If1 to itself that does not go over Fi1,
+  # then any path from If1 to Fi1 is a proper match and there is
+  # no point in offering the Fi2 to later stages, so when a DFA
+  # state represents both Fi1 and Fi2 the Fi2 vertex is removed.
+
+  if ($if1_regular and $op eq '#ordered_choice') {
+    my @candidates = map { @$_ } $g2->_dbh->selectall_array(q{
+      SELECT
+        vs1.vertex AS vertex
+      FROM
+        view_vertex_shadows vs1
+          INNER JOIN vertex_property fi1_p
+            ON (vs1.shadows = fi1_p.vertex
+              AND fi1_p.type = 'Fi1')
+          INNER JOIN view_vertex_shadows vs2
+            ON (vs1.vertex = vs2.vertex)
+          INNER JOIN vertex_property fi2_p
+            ON (vs2.shadows = fi2_p.vertex
+              AND fi2_p.type = 'Fi2')
+      WHERE
+        fi1_p.vertex = ?
+        AND
+        fi2_p.vertex = ?
+    }, {}, $fi1, $fi2);
+
+    for my $v (@candidates) {
+
+      my @cleaned = grep {
+        $_ ne $fi2
+      } @{ $g2->_json->decode( $g2->vp_shadows($v) ) };
+
+      $g2->_log->debugf("Removing If2 vertex %u from vertex %u",
+        $fi2, $v);
+
+#      next;
+
+      $g2->vp_shadows($v, $g2->_json->encode(\@cleaned));
+    }
   }
 
-  # dubious
-  if ($op eq '#ordered_choice' and $if1_regular) {
-#    $g2->add_shadows($g2->gp_dead_vertex(), $fi2);
-  }
-
-  # TODO: don't understand this
-  if (0 and $if1_regular and $if2_regular) {
-    $g2->add_shadows($g2->gp_dead_vertex(), $_)
-      for $if, $if1, $if2, $fi2, $fi1, $fi;
-  }
-
-  for my $v (values %state_to_vertex) {
-
-    # TODO: would this work?
-    last;
-
-    last unless $if1_regular;
-    last unless $op eq '#ordered_choice';
-    my $shadows = $g2->vp_shadows($v);
-    next unless defined $shadows;
-    my @shadows = @{ $g2->_json->decode($shadows) };
-    next unless grep { $_ eq $fi1 } @shadows;
-    $g2->vp_shadows($v, $g2->_json->encode([
-      grep { $_ ne $fi2 } @shadows
-    ]));
-  }
-
-  # TODO: makes no sense, wrong shadow direction
-  if (0 and not ($if1_regular and $if2_regular)) {
-    $g2->vp_shadows($_, undef)
-      for $if, $if1, $if2, $fi2, $fi1, $fi
-  }
-
+  # Always add Fi2 to the vertex that shadows the dead state,
+  # mainly to ensure that for #ordered_choice with a regular
+  # If1 structure, the Fi2 vertex does not end up unshadowed.
+  $g2->add_shadows($state_to_vertex{ $d->dead_state_id }, $fi2);
 }
 
 sub _shadowed_subgraph_between {
@@ -489,4 +500,3 @@ sub _create_vertex_spans {
 1;
 
 __END__
-

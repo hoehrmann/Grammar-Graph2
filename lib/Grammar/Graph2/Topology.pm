@@ -298,6 +298,57 @@ sub BUILD {
       v
     ;
 
+    -----------------------------------------------------------------
+    -- view_vertices_between_self_and_partner
+    -----------------------------------------------------------------
+    DROP VIEW IF EXISTS view_vertices_between_self_and_partner;
+    CREATE VIEW view_vertices_between_self_and_partner AS
+    WITH RECURSIVE
+    foo AS (
+      SELECT
+        vertex AS root,
+        vertex AS reachable
+      FROM
+        vertex_property
+      WHERE
+        partner IS NOT NULL
+      UNION
+      SELECT
+        foo.root AS root,
+        Edge.dst AS reachable
+      FROM
+        foo
+          INNER JOIN vertex_property root_p
+            ON (root_p.vertex = foo.root)
+          INNER JOIN old_edge Edge 
+            ON (Edge.src = foo.reachable)
+      WHERE
+        root_p.partner <> Edge.src
+    )
+    SELECT
+      root,
+      reachable
+    FROM
+      foo
+    ;
+
+    -----------------------------------------------------------------
+    -- view_contents_self_loop
+    -----------------------------------------------------------------
+    DROP VIEW IF EXISTS view_contents_self_loop;
+    CREATE VIEW view_contents_self_loop AS
+    SELECT
+      root_p.vertex,
+      MIN(reachable_p.self_loop) AS self_loop
+    FROM
+      view_vertices_between_self_and_partner b
+        INNER JOIN vertex_property root_p
+          ON (root_p.vertex = b.root)
+        INNER JOIN vertex_property reachable_p
+          ON (b.reachable = reachable_p.vertex)
+    GROUP BY
+      root_p.vertex
+    ;
 
   });
 
