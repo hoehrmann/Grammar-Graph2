@@ -120,7 +120,7 @@ sub shadowed_by_or_self {
 sub add_shadows {
   my ($self, $vertex, @vertices) = @_;
 
-  # TODO: recursion?
+#  $self->g->add_vertices(@vertices);
 
   my (undef, $combined) = $self->_dbh->selectrow_array(q{
     WITH combined AS (
@@ -236,18 +236,6 @@ sub conditionals_from_if {
 #
 #####################################################################
 
-sub _rw_vertex_attribute_old {
-  my ($name, $self, $vertex, $value) = @_;
-
-  my $old = $self->g->get_vertex_attribute($vertex, $name);
-
-  if (@_ > 3) {
-    $self->g->set_vertex_attribute($vertex, $name, $value);
-  }
-
-  return $old;
-}
-
 sub _rw_vertex_attribute {
   my ($name, $self, $vertex, $value) = @_;
 
@@ -327,7 +315,8 @@ sub from_grammar_graph {
   $dbh->do(q{
     CREATE TABLE vertex_property (
       vertex PRIMARY KEY UNIQUE NOT NULL
-        REFERENCES Vertex(vertex_name) ON UPDATE CASCADE,
+        REFERENCES Vertex(vertex_name)
+          ON UPDATE CASCADE ON DELETE CASCADE,
       type NOT NULL DEFAULT 'empty',
       name,
       p1 REFERENCES Vertex(vertex_name) ON UPDATE CASCADE,
@@ -339,7 +328,7 @@ sub from_grammar_graph {
       run_list,
       shadows,
       self_loop DEFAULT 'no',
-      topo,
+      topo INT,
       epsilon_group,
       stack_group,
       shadow_group

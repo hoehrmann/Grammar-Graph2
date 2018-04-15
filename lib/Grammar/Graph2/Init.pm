@@ -32,12 +32,6 @@ sub _init {
     g => $self,
   );
 
-#  $dbh->sqlite_backup_to_file('BEFORE-MEGA.sqlite');
-
-  my $old_edges = Graph::Feather->new(
-    edges => [ $self->g->edges ]
-  );
-
   $self->_dbh->do(q{
     DROP TABLE IF EXISTS old_edge;
     CREATE TABLE old_edge(
@@ -46,6 +40,8 @@ sub _init {
     );
     INSERT INTO old_edge SELECT * FROM edge;
   });
+
+  $self->_rename_vertices();
 
   Grammar::Graph2::Megamata->new(
     base_graph => $self,
@@ -73,22 +69,6 @@ sub _init {
 
   $self->g->feather_delete_edges($self->g->edges);
   $self->g->add_edges( $subgraph->edges );
-
-  $self->_dbh->do(q{
-    WITH good AS (
-      SELECT src AS vertex FROM old_edge
-      UNION
-      SELECT dst FROM old_edge
-      UNION
-      SELECT src FROM edge
-      UNION
-      SELECT dst FROM edge
-    )
-    DELETE FROM
-      vertex_property
-    WHERE
-      vertex NOT IN (SELECT vertex FROM good)
-  }) if 1;
 
   $self->_cover_input_input_edges();
 
@@ -540,8 +520,45 @@ sub _rename_vertices {
   local $self->_dbh->{sqlite_allow_multiple_statements} = 1;
 
   $self->_dbh->do(q{
-    DROP TABLE IF EXISTS rename_vertex;
-    CREATE TABLE rename_vertex AS
+    WITH RECURSIVE 
+    has_neighbours AS (
+      SELECT src AS vertex FROM old_edge
+      UNION
+      SELECT dst FROM old_edge
+      UNION
+      SELECT src FROM edge
+      UNION
+      SELECT dst FROM edge
+      UNION
+      SELECT
+        attribute_value
+      FROM
+        graph_attribute
+      WHERE
+        attribute_name IN ('start_vertex', 'final_vertex')
+      UNION
+      SELECT
+        vertex_p.vertex 
+      FROM
+        has_neighbours
+          INNER JOIN vertex_property vertex_p
+            ON (has_neighbours.vertex IN 
+              (vertex_p.p1, vertex_p.p2, vertex_p.partner))
+    )
+    DELETE FROM
+      vertex
+    WHERE
+      vertex_name NOT IN (SELECT vertex FROM has_neighbours)
+  }) if 1;
+
+  $self->_dbh->do(q{
+
+    -- 
+--    INSERT OR IGNORE INTO Vertex(vertex_name)
+--    SELECT vertex FROM vertex_property;
+
+    DROP TABLE IF EXISTS t_rename_vertex;
+    CREATE TABLE t_rename_vertex AS
     SELECT
       Vertex.vertex_name AS vertex
     FROM
@@ -549,25 +566,47 @@ sub _rename_vertices {
         LEFT JOIN vertex_property vertex_p
           ON (vertex_p.vertex = Vertex.vertex_name)
     ORDER BY
-      1
+      vertex_p.topo IS NULL ASC,
+      vertex_p.topo,
+      vertex_p.run_list IS NULL DESC,
+      vertex_p.type,
+      vertex_p.name
   });
+
+  $self->_dbh->begin_work();
+  
+  $self->_dbh->do(q{
+--    PRAGMA defer_foreign_keys = 1;
+    UPDATE
+      vertex
+    SET
+      vertex_name = (SELECT CAST(-rowid AS TEXT)
+                     FROM t_rename_vertex
+                     WHERE vertex = vertex.vertex_name)
+    ;
+    UPDATE
+      vertex
+    SET
+      vertex_name = (SELECT CAST(-vertex_name AS TEXT))
+    ;
+  }) or die;
+
+  $self->_dbh->commit;
 
   my %map = %{ $self->_dbh->selectall_hashref(q{
     SELECT
       vertex,
       rowid
     FROM
-      rename_vertex
+      t_rename_vertex
   }, 'vertex') };
-
-#die Dump \%map;
 
   for my $meth (qw/vp_shadows vp_epsilon_group/) {
     for my $v ($self->g->vertices) {
       my $encoded = $self->$meth($v);
       next unless defined $encoded;
       $self->$meth($v, $self->_json->encode([
-        map { '' . $map{$_}->{rowid} }
+        map { $map{$_}->{rowid} // () }
           @{ $self->_json->decode($encoded) }
       ]));
 #      warn $self->$meth($v);
@@ -578,15 +617,6 @@ sub _rename_vertices {
   $self->gp_final_vertex('' . $map{$self->gp_final_vertex()}->{rowid});
 #  $self->gp_dead_vertex('' . $map{$self->gp_dead_vertex()}->{rowid})
 #    if defined $self->gp_dead_vertex();
-
-  $self->_dbh->do(q{
-    UPDATE
-      vertex
-    SET
-      vertex_name = (SELECT CAST(rowid AS TEXT)
-                     FROM rename_vertex
-                     WHERE vertex = vertex.vertex_name)
-  });
 
 }
 
