@@ -130,8 +130,6 @@ sub flatten_shadows {
 
   local $self->_dbh->{sqlite_allow_multiple_statements} = 1;
 
-#$self->_dbh->sqlite_backup_to_file('BUG.sqlite');
-
   $self->_dbh->do(q{
     DROP TABLE IF EXISTS t_flatten_shadows;
     CREATE TABLE t_flatten_shadows AS 

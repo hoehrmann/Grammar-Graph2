@@ -58,7 +58,7 @@ sub BUILD {
     DROP VIEW IF EXISTS view_vertex_shadows;
     CREATE VIEW view_vertex_shadows AS
     SELECT * FROM vertex_shadows;
-    
+
     DROP TABLE IF EXISTS m_view_vertex_shadows;
     CREATE TABLE  m_view_vertex_shadows AS
     SELECT * FROM view_vertex_shadows LIMIT 0;
@@ -381,13 +381,12 @@ sub _insert_dfa {
     $self->base_graph->vp_name($base_id + $state_id, "#dfaState:$state_id:$guid");
     $self->base_graph->vp_shadow_group($base_id + $state_id, "$base_id");
 
-#die "TRYING TO SHADOW INPUT VERTEX" if grep { $self->base_graph->is_input_vertex($_) } @{ $self->_json->decode($shadowed) };
+#die "TRYING TO SHADOW INPUT VERTEX"
+# if grep { $self->base_graph->is_input_vertex($_) }
+#   @{ $self->_json->decode($shadowed) };
 
     $self->base_graph->add_shadows($base_id + $state_id,
         @{ $self->_json->decode($shadowed) });
-
-#    $self->base_graph->vp_shadows($base_id + $state_id, '[]')
-#      unless defined $self->base_graph->vp_shadows($base_id + $state_id);
 
   }
 
@@ -419,15 +418,15 @@ sub _insert_dfa {
   } 1 .. $max_state;
 
   $self->base_graph->_dbh->do(q{
-    DROP TABLE IF EXISTS TConnection;
+    DROP TABLE IF EXISTS t_connection;
   });
 
   $self->base_graph->_dbh->do(q{
-    DROP TABLE IF EXISTS TStartVertices;
+    DROP TABLE IF EXISTS t_start_vertices;
   });
 
   $self->base_graph->_dbh->do(q{
-    CREATE TABLE TStartVertices AS
+    CREATE TABLE t_start_vertices AS
     SELECT
       CAST(each.value AS TEXT) AS vertex
     FROM
@@ -443,13 +442,13 @@ sub _insert_dfa {
   );
 
   $self->base_graph->_dbh->do(q{
-    CREATE TABLE TConnection AS
+    CREATE TABLE t_connection AS
     SELECT
       m_view_shadow_connections_in.*
     FROM
       m_view_shadow_connections_in
-        INNER JOIN TStartVertices
-          ON (out_dst = TStartVertices.vertex)
+        INNER JOIN t_start_vertices
+          ON (out_dst = t_start_vertices.vertex)
     UNION
     SELECT
       *
@@ -461,22 +460,23 @@ sub _insert_dfa {
     DELETE FROM Edge
     WHERE
       EXISTS (SELECT 1
-              FROM TConnection
---                INNER JOIN vertex_property src_p ON (src_p.vertex = TConnection.in_src)
---                INNER JOIN vertex_property dst_p ON (dst_p.vertex = TConnection.in_dst)
+              FROM t_connection
+--                INNER JOIN vertex_property src_p ON (src_p.vertex = t_connection.in_src)
+--                INNER JOIN vertex_property dst_p ON (dst_p.vertex = t_connection.in_dst)
               WHERE
                 in_src = Edge.src
                 AND
                 in_dst = Edge.dst)
   }) if 1;
 
+  # 
   $self->base_graph->_dbh->do(q{
     INSERT OR IGNORE INTO Edge(src, dst)
     SELECT
       out_src,
       out_dst
     FROM
-      TConnection
+      t_connection
   });
 
   return %state_to_vertex;
