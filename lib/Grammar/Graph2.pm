@@ -282,9 +282,9 @@ sub from_grammar_graph {
       p1 REFERENCES Vertex(vertex_name) ON UPDATE CASCADE,
       p2 REFERENCES Vertex(vertex_name) ON UPDATE CASCADE,
       partner REFERENCES Vertex(vertex_name) ON UPDATE CASCADE,
-      is_stack NOT NULL DEFAULT 0,
-      is_push NOT NULL DEFAULT 0,
-      is_pop NOT NULL DEFAULT 0,
+      is_stack INT NOT NULL DEFAULT 0,
+      is_push INT NOT NULL DEFAULT 0,
+      is_pop INT NOT NULL DEFAULT 0,
       run_list,
       self_loop DEFAULT 'no',
       topo INT,
@@ -301,6 +301,12 @@ sub from_grammar_graph {
       p1,
       p2,
       partner,
+      CAST( type IN (
+        'Start', 'If', 'If1', 'If2',
+        'Final', 'Fi', 'Fi1', 'Fi2'
+      ) AS INT) AS is_stack,
+      CAST(type IN ('Start', 'If', 'If1', 'If2') AS INT) AS is_push,
+      CAST(type IN ('Final', 'Fi', 'Fi1', 'Fi2') AS INT) AS is_pop,
 /*
       is_stack NOT NULL DEFAULT 0,
       is_push NOT NULL DEFAULT 0,
@@ -310,14 +316,7 @@ sub from_grammar_graph {
       self_loop,
       topo,
       epsilon_group,
-      shadow_group,
-
-      CAST(type IN ('Start', 'If', 'If1', 'If2') AS INT) AS is_push,
-      CAST(type IN ('Final', 'Fi', 'Fi1', 'Fi2') AS INT) AS is_pop,
-      CAST( type IN (
-        'Start', 'If', 'If1', 'If2',
-        'Final', 'Fi', 'Fi1', 'Fi2'
-      ) AS INT) AS is_stack
+      shadow_group
     FROM
       vertex_property
     ;

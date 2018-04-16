@@ -714,7 +714,7 @@ sub _create_collapsed_to_stack_vertices {
         INNER JOIN planar right_
           ON (left_.dst_vertex = right_.src_vertex
             AND left_.dst_pos = right_.src_pos)
-        INNER JOIN vertex_property mid_p
+        INNER JOIN view_vp_plus mid_p
           ON (mid_p.vertex = left_.dst_vertex)
     WHERE
       NOT(COALESCE(mid_p.is_stack, 0))
@@ -723,11 +723,11 @@ sub _create_collapsed_to_stack_vertices {
     p.*
   FROM
     planar p
-      INNER JOIN vertex_property src_p
+      INNER JOIN view_vp_plus src_p
         ON (src_p.vertex = p.src_vertex)
-      INNER JOIN vertex_property dst_p
+      INNER JOIN view_vp_plus dst_p
         ON (dst_p.vertex = p.dst_vertex)
-      LEFT JOIN vertex_property mid_src_p
+      LEFT JOIN view_vp_plus mid_src_p
         ON (mid_src_p.vertex = p.mid_src_vertex)
   WHERE
     1 = 1
