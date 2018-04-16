@@ -62,10 +62,10 @@ sub BUILD {
       view_top_down_reachable v_pc
         INNER JOIN t sibling
           ON (sibling.rowid = v_pc.id)
-        INNER JOIN vertex_property mid1_p
+        INNER JOIN view_vp_plus mid1_p
           ON (mid1_p.vertex = sibling.mid_src_vertex
             AND mid1_p.is_pop)
-        INNER JOIN vertex_property mid2_p
+        INNER JOIN view_vp_plus mid2_p
           ON (mid2_p.vertex = sibling.mid_dst_vertex)
 
     ORDER BY
@@ -98,14 +98,14 @@ sub BUILD {
       view_top_down_reachable v_pc
         INNER JOIN t parent_child
           ON (parent_child.rowid = v_pc.id)
-        INNER JOIN vertex_property src_p
+        INNER JOIN view_vp_plus src_p
           ON (src_p.vertex = parent_child.src_vertex)
-        INNER JOIN vertex_property mid1_p
+        INNER JOIN view_vp_plus mid1_p
           ON (mid1_p.vertex = parent_child.mid_src_vertex
             AND mid1_p.is_push)
-        INNER JOIN vertex_property mid2_p
+        INNER JOIN view_vp_plus mid2_p
           ON (mid2_p.vertex = parent_child.mid_dst_vertex)
-        INNER JOIN vertex_property dst_p
+        INNER JOIN view_vp_plus dst_p
           ON (dst_p.vertex = parent_child.dst_vertex)
 
     UNION

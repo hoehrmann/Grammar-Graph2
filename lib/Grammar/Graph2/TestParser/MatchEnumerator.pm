@@ -247,9 +247,9 @@ sub _find_next_path_between_step {
       t.*
     FROM
       t
-        INNER JOIN vertex_property src_p
+        INNER JOIN view_vp_plus src_p
           ON (src_p.vertex = t.src_vertex)
-        LEFT JOIN vertex_property mid_src_p
+        LEFT JOIN view_vp_plus mid_src_p
           ON (mid_src_p.vertex = t.mid_src_vertex)
 
         -- to filter duplicates in the new path

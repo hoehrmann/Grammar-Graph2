@@ -55,9 +55,9 @@ sub BUILD {
         Edge.dst AS child
       FROM
         Edge
-          INNER JOIN vertex_property as dst_p
+          INNER JOIN view_vp_plus as dst_p
             ON (dst_p.vertex = Edge.dst)
-          INNER JOIN vertex_property as src_p
+          INNER JOIN view_vp_plus as src_p
             ON (src_p.vertex = Edge.src)
       WHERE
         src_p.is_push
@@ -71,13 +71,13 @@ sub BUILD {
       FROM Edge
         INNER JOIN pc AS r
           ON (Edge.src = r.child)
-        INNER JOIN vertex_property AS src_p
+        INNER JOIN view_vp_plus AS src_p
           ON (Edge.src = src_p.vertex)
-        INNER JOIN vertex_property AS dst_p
+        INNER JOIN view_vp_plus AS dst_p
           ON (Edge.dst = dst_p.vertex)
-        INNER JOIN vertex_property AS parent_p
+        INNER JOIN view_vp_plus AS parent_p
           ON (r.parent = parent_p.vertex)
-        INNER JOIN vertex_property AS child_p
+        INNER JOIN view_vp_plus AS child_p
           ON (r.child = child_p.vertex)
         LEFT JOIN Edge partner_edges
           ON (src_p.partner = partner_edges.src
