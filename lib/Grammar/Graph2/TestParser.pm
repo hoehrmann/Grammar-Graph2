@@ -61,28 +61,6 @@ sub BUILD {
 sub create_t {
   my ($self) = @_;
 
-#=pod
-
-  my @x = $self->_dbh->selectrow_array(q{
-    SELECT 
-      view_vp_plus.vertex
-    FROM
-      view_vp_plus 
-        LEFT JOIN vertex_property
-          ON (view_vp_plus.is_stack = vertex_property.is_stack
-            AND view_vp_plus.is_push = vertex_property.is_push
-            AND view_vp_plus.is_pop = vertex_property.is_pop)
-    WHERE
-      vertex_property.vertex IS NULL
-  });
-
-  if (@x) {
-#    $self->_dbh->sqlite_backup_to_file('OMG.sqlite');
-    die;
-  }
-
-#=cut
-
   $self->_file_to_table();
 
   $self->_dbh->do(q{ ANALYZE });
@@ -774,13 +752,13 @@ sub _create_trees_bottom_up {
             ON (middle_.dst_pos = right_.src_pos
               AND middle_.dst_vertex = right_.src_vertex)
 
-          INNER JOIN vertex_property src_p
+          INNER JOIN view_vp_plus src_p
             ON (src_p.vertex = left_.src_vertex)
-          INNER JOIN vertex_property mid1_p
+          INNER JOIN view_vp_plus mid1_p
             ON (mid1_p.vertex = left_.dst_vertex)
-          INNER JOIN vertex_property mid2_p
+          INNER JOIN view_vp_plus mid2_p
             ON (mid2_p.vertex = right_.src_vertex)
-          INNER JOIN vertex_property dst_p
+          INNER JOIN view_vp_plus dst_p
             ON (dst_p.vertex = right_.dst_vertex)
 
           LEFT JOIN t if1fi
@@ -805,7 +783,7 @@ sub _create_trees_bottom_up {
             ON (pog.dst_pos = left_.src_pos
               AND pog.dst_vertex = left_.src_vertex)
 
-          LEFT JOIN vertex_property pog_p
+          LEFT JOIN view_vp_plus pog_p
             ON (pog_p.vertex = pog.src_vertex
               AND pog_p.is_push)
 
@@ -830,7 +808,7 @@ sub _create_trees_bottom_up {
             AND mid1_p.is_pop
             AND mid2_p.is_push -- NEW NEW NEW
 --            AND dst_p.partner = mid2_p.vertex
-            AND pog_p.rowid IS NOT NULL
+            AND pog_p.vertex IS NOT NULL
           )
         )
         

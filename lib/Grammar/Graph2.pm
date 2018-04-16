@@ -211,23 +211,6 @@ sub _rw_vertex_attribute {
     }, $name, $self->g->{dbh}->quote($value),
               $self->g->{dbh}->quote($vertex)));
 
-    if ($name eq 'type') {
-      use Carp;
-      confess unless length $value;
-      my $is_push = 0 + ($value =~ /^(Start|If|If1|If2)$/);
-      my $is_pop = 0 + ($value =~ /^(Final|Fi|Fi1|Fi2)$/);
-      my $is_stack = 0 + ($is_push || $is_pop);
-      $self->g->{dbh}->do(q{
-        UPDATE
-          vertex_property
-        SET
-          is_stack = CAST(? AS INT),
-          is_push = CAST(? AS INT),
-          is_pop = CAST(? AS INT)
-        WHERE
-          vertex = ?
-      }, {}, $is_stack, $is_push, $is_pop, $vertex);
-    }
   }
 
   return $old;
@@ -282,9 +265,6 @@ sub from_grammar_graph {
       p1 REFERENCES Vertex(vertex_name) ON UPDATE CASCADE,
       p2 REFERENCES Vertex(vertex_name) ON UPDATE CASCADE,
       partner REFERENCES Vertex(vertex_name) ON UPDATE CASCADE,
-      is_stack INT NOT NULL DEFAULT 0,
-      is_push INT NOT NULL DEFAULT 0,
-      is_pop INT NOT NULL DEFAULT 0,
       run_list,
       self_loop DEFAULT 'no',
       topo INT,
@@ -307,11 +287,6 @@ sub from_grammar_graph {
       ) AS INT) AS is_stack,
       CAST(type IN ('Start', 'If', 'If1', 'If2') AS INT) AS is_push,
       CAST(type IN ('Final', 'Fi', 'Fi1', 'Fi2') AS INT) AS is_pop,
-/*
-      is_stack NOT NULL DEFAULT 0,
-      is_push NOT NULL DEFAULT 0,
-      is_pop NOT NULL DEFAULT 0,
-*/
       run_list,
       self_loop,
       topo,
