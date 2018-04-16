@@ -64,7 +64,6 @@ sub vp_run_list       { _rw_vertex_attribute('run_list',      @_) }
 sub vp_self_loop      { _rw_vertex_attribute('self_loop',     @_) }
 sub vp_topo           { _rw_vertex_attribute('topo',          @_) }
 sub vp_epsilon_group  { _rw_vertex_attribute('epsilon_group', @_) }
-sub vp_stack_group    { _rw_vertex_attribute('stack_group',   @_) }
 sub vp_shadow_group   { _rw_vertex_attribute('shadow_group',  @_) }
 
 #####################################################################
@@ -285,7 +284,6 @@ sub from_grammar_graph {
       self_loop DEFAULT 'no',
       topo INT,
       epsilon_group,
-      stack_group,
       shadow_group
     );
 

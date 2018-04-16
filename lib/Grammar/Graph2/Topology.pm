@@ -355,65 +355,10 @@ sub BUILD {
 
   $self->_add_self_loop_attributes();
   $self->_add_topological_attributes();
-#  $self->_add_stack_group_attributes();
   $self->_dbh->do(q{ ANALYZE });
 }
 
 local $Storable::canonical = 1;
-
-=pod
-
-sub _add_stack_group_attributes {
-  my ($self) = @_;
-
-  my $json = JSON->new->canonical(1)->indent(0)->ascii(1);
-
-  my $dbh = ...;
-
-  $dbh->begin_work();
-
-  $dbh->sqlite_create_function('_json_sorted_uniq_array', 1, sub {
-    my ($tmp) = @_;
-    return $json->encode([
-      sort { $a cmp $b } uniq @{ $json->decode($tmp) }
-    ]);
-  });
-
-  $dbh->do(q{
-    DROP TABLE IF EXISTS XXX1;
-    
-    CREATE TABLE XXX1 AS
-    SELECT
-      vertex,
-      _json_sorted_uniq_array(json_group_array(next_stack)) AS ...g
-    FROM 
-      view_next_stack
-    GROUP BY
-      vertex
-    ;
-
-    CREATE TABLE XXX2 AS SELECT DISTINCT ...g FROM XXX1;
-
-  });
-
-  my @stack_group = $self->_dbh->selectall_array(q{
-    SELECT
-      XXX2.rowid
-    FROM
-      XXX1
-        INNER JOIN XXX2
-          ON (XXX1....g = XXX2....g)
-  });
-
-  $self->g->vp_stack_group(@$_)
-    for @stack_group;
-  
-  $dbh->sqlite_create_function('_json_sorted_uniq_array', 1, undef);
-
-  $dbh->rollback();
-}
-
-=cut
 
 sub _add_self_loop_attributes {
   my ($self) = @_;
