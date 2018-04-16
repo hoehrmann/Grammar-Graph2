@@ -370,17 +370,18 @@ sub _new_cond {
 
     for my $v (@candidates) {
 
-      my @cleaned = grep {
-        $_ ne $fi2
-      } @{ $g2->_json->decode( $g2->vp_shadows($v) ) };
-
       $g2->_log->debugf("Removing If2 vertex %u from vertex %u",
         $fi2, $v);
 
       # FIXME: disabled due to bug
       next;
 
-      $g2->vp_shadows($v, $g2->_json->encode(\@cleaned));
+      $g2->_dbh->do(q{
+        DELETE
+        FROM vertex_shadows
+        WHERE vertex = CAST(? AS TEXT)
+          AND shadows = CAST(? AS TEXT)
+      }, {}, $v, $fi2)
     }
   }
 
@@ -562,7 +563,7 @@ sub _rename_vertices {
       t_rename_vertex
   }, 'vertex') };
 
-  for my $meth (qw/vp_shadows vp_epsilon_group/) {
+  for my $meth (qw/vp_epsilon_group/) {
     for my $v ($self->g->vertices) {
       my $encoded = $self->$meth($v);
       next unless defined $encoded;

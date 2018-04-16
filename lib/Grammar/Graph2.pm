@@ -61,7 +61,6 @@ sub vp_p1             { _rw_vertex_attribute('p1',            @_) }
 sub vp_p2             { _rw_vertex_attribute('p2',            @_) }
 sub vp_partner        { _rw_vertex_attribute('partner',       @_) }
 sub vp_run_list       { _rw_vertex_attribute('run_list',      @_) }
-sub vp_shadows        { _rw_vertex_attribute('shadows',       @_) }
 sub vp_self_loop      { _rw_vertex_attribute('self_loop',     @_) }
 sub vp_topo           { _rw_vertex_attribute('topo',          @_) }
 sub vp_epsilon_group  { _rw_vertex_attribute('epsilon_group', @_) }
@@ -108,42 +107,20 @@ sub is_shadowed {
 sub add_shadows {
   my ($self, $vertex, @vertices) = @_;
 
-#  $self->g->add_vertices(@vertices);
+#  $self->g->add_vertices($vertex, @vertices);
 
-  my (undef, $combined) = $self->_dbh->selectrow_array(q{
-    WITH combined AS (
-/*
-      SELECT 
-        vertex_p.vertex AS vertex,
-        CAST(each.value AS TEXT) AS shadows
-      FROM
-        vertex_property vertex_p
-          INNER JOIN json_each(vertex_p.shadows) each
-      WHERE
-        vertex_p.vertex = ?
-*/
-      SELECT * FROM view_vertex_shadows WHERE vertex = CAST(? AS TEXT)
-      UNION
-      SELECT
-        ? AS vertex,
-        CAST(each.value AS TEXT) AS shadows
-      FROM
-        json_each(?) each
-    )
-    SELECT
-      vertex,
-      json_group_array(shadows) AS shadows
+  $self->_dbh->do(q{
+    INSERT OR IGNORE INTO vertex_shadows(vertex, shadows)
+    SELECT 
+      CAST(? AS TEXT) AS vertex,
+      CAST(each.value AS TEXT) AS shadows
     FROM
-      combined
+      json_each(?) each
     WHERE
-      shadows NOT IN (SELECT vertex FROM view_start_vertex)
-      AND
-      shadows NOT IN (SELECT vertex FROM view_final_vertex)
-    GROUP BY
-      vertex
-  }, {}, $vertex, $vertex, $self->_json->encode(\@vertices));
-
-  $self->vp_shadows($vertex, $combined);
+      CAST(each.value AS TEXT) NOT IN (SELECT vertex FROM view_start_vertex
+                                       UNION
+                                       SELECT vertex FROM view_final_vertex)
+  }, {}, $vertex, $self->_json->encode(\@vertices));
 }
 
 sub flatten_shadows {
@@ -151,14 +128,18 @@ sub flatten_shadows {
 
 #return;
 
+  local $self->_dbh->{sqlite_allow_multiple_statements} = 1;
+
+#$self->_dbh->sqlite_backup_to_file('BUG.sqlite');
+
   $self->_dbh->do(q{
+    DROP TABLE IF EXISTS t_flatten_shadows;
+    CREATE TABLE t_flatten_shadows AS 
     WITH RECURSIVE
-    vertex_shadows AS (
-      SELECT * FROM view_vertex_shadows
-    ),
     rec AS (
       SELECT
-        *
+        vertex,
+        shadows
       FROM
         vertex_shadows
       UNION
@@ -172,29 +153,21 @@ sub flatten_shadows {
     ),
     root_leaf AS (
       SELECT
-        *
+        vertex,
+        shadows
       FROM
         rec
       WHERE
         vertex NOT IN (SELECT shadows FROM vertex_shadows)
         AND
         shadows NOT IN (SELECT vertex FROM vertex_shadows)
-    ),
-    new_shadows AS (
-      SELECT
-        vertex,
-        json_group_array(shadows) AS shadows
-      FROM
-        root_leaf
-      GROUP BY
-        vertex
     )
-    UPDATE
-      vertex_property
-    SET
-      shadows = (SELECT shadows
-                 FROM new_shadows
-                 WHERE vertex_property.vertex = new_shadows.vertex)
+    SELECT vertex, shadows FROM root_leaf;
+
+    DELETE FROM vertex_shadows;
+
+    INSERT OR IGNORE INTO vertex_shadows(vertex, shadows)
+    SELECT * FROM t_flatten_shadows;
   });
 }
 
@@ -311,13 +284,23 @@ sub from_grammar_graph {
       is_push NOT NULL DEFAULT 0,
       is_pop NOT NULL DEFAULT 0,
       run_list,
-      shadows,
       self_loop DEFAULT 'no',
       topo INT,
       epsilon_group,
       stack_group,
       shadow_group
     );
+
+    CREATE TABLE vertex_shadows(
+      vertex REFERENCES Vertex(vertex_name)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+      shadows REFERENCES Vertex(vertex_name)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+      UNIQUE(vertex, shadows)
+    );
+
+    CREATE INDEX idx_vertex_shadows_shadows
+      ON vertex_shadows(shadows);
   });
 
   my $self = $class->new(

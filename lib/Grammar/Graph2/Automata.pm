@@ -57,13 +57,8 @@ sub BUILD {
   $self->base_graph->_dbh->do(q{
     DROP VIEW IF EXISTS view_vertex_shadows;
     CREATE VIEW view_vertex_shadows AS
-    SELECT DISTINCT
-      vertex_p.vertex,
-      CAST(each.value AS TEXT) AS shadows
-    FROM
-      vertex_property vertex_p
-        INNER JOIN json_each(vertex_p.shadows) each
-    ;
+    SELECT * FROM vertex_shadows;
+    
     DROP TABLE IF EXISTS m_view_vertex_shadows;
     CREATE TABLE  m_view_vertex_shadows AS
     SELECT * FROM view_vertex_shadows LIMIT 0;
@@ -378,7 +373,10 @@ sub _insert_dfa {
   while (my $row = $st_sth->fetchrow_arrayref) {
     my ($state_id, $shadowed) = @$row;
     $shadowed //= '[]';
-    $self->_log->debugf("creating dfa state %u vertex %u shadowing %s", $state_id, $base_id + $state_id, $shadowed);
+
+    $self->_log->debugf("creating dfa state %u vertex %u shadowing %s",
+      $state_id, $base_id + $state_id, $shadowed);
+
     $self->base_graph->vp_type($base_id + $state_id, 'empty');
     $self->base_graph->vp_name($base_id + $state_id, "#dfaState:$state_id:$guid");
     $self->base_graph->vp_shadow_group($base_id + $state_id, "$base_id");
@@ -388,8 +386,8 @@ sub _insert_dfa {
     $self->base_graph->add_shadows($base_id + $state_id,
         @{ $self->_json->decode($shadowed) });
 
-    $self->base_graph->vp_shadows($base_id + $state_id, '[]')
-      unless defined $self->base_graph->vp_shadows($base_id + $state_id);
+#    $self->base_graph->vp_shadows($base_id + $state_id, '[]')
+#      unless defined $self->base_graph->vp_shadows($base_id + $state_id);
 
   }
 
