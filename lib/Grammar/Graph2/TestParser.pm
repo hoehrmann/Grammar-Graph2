@@ -387,118 +387,78 @@ sub _update_shadowed_testparser_all_edges {
   local $self->_dbh->{sqlite_allow_multiple_statements} = 1;
 
   $self->_dbh->do(q{
-    CREATE TABLE t_vertex_shadows_or_self AS 
-    SELECT * FROM view_vertex_shadows_or_self;
+    DROP TABLE IF EXISTS t_shadowed;
+    CREATE TABLE t_shadowed AS SELECT * FROM testparser_all_edges;
+    DELETE FROM testparser_all_edges;
+    DROP TABLE testparser_all_edges;
 
-    CREATE UNIQUE INDEX idx_t_vertex_shadows_or_self
-      ON t_vertex_shadows_or_self(vertex, shadows);
-
-    ANALYZE t_vertex_shadows_or_self;
-
-    ANALYZE testparser_all_edges;
-  });
-
-  $self->_dbh->do(q{
+    CREATE TABLE testparser_all_edges AS 
     WITH RECURSIVE
-    to_insert AS (
-      SELECT * FROM testparser_all_edges
-/*
-      UNION
-      SELECT src_pos, src_vertex, src_pos, src_vertex FROM testparser_all_edges INNER JOIN vertex_property ON (vertex_property.vertex = testparser_all_edges.src_vertex AND vertex_property.type <> 'Input')
-      UNION
-      SELECT src_pos, src_vertex, src_pos+1, src_vertex FROM testparser_all_edges INNER JOIN vertex_property ON (vertex_property.vertex = testparser_all_edges.src_vertex AND vertex_property.type = 'Input')
-*/
-/*
-      UNION
-      SELECT dst_pos, dst_vertex, dst_pos, dst_vertex FROM testparser_all_edges
-*/
+    start_pos AS (
+      SELECT MIN(pos) AS pos FROM testparser_input
+    ),
+    final_pos AS (
+      SELECT 1 + MAX(pos) AS pos FROM testparser_input
+    ),
+    forward_reachable AS (
+      SELECT
+        start_pos.pos AS pos,
+        view_start_vertex.vertex AS vertex
+      FROM
+        start_pos
+          INNER JOIN view_start_vertex
       UNION
       SELECT
-        a.src_pos AS src_pos,
-        src_shadow.shadows AS src_vertex,
-        a.dst_pos AS dst_pos,
-        old_edge.dst AS dst_vertex
+        dst_pos AS pos,
+        dst_vertex AS vertex
       FROM
-        to_insert a
-          INNER JOIN vertex_property src_p
-            ON (src_p.vertex = a.src_vertex)
-          LEFT JOIN t_vertex_shadows_or_self src_shadow
-            ON (src_shadow.vertex = a.src_vertex)
-
-          LEFT JOIN old_edge
-            ON (src_shadow.shadows = old_edge.src)
-
-          LEFT JOIN vertex_property old_src_p
-            ON (old_src_p.vertex = old_edge.src)
-
-/*
-          LEFT JOIN t_vertex_shadows_or_self dst_shadow
-            ON (dst_shadow.vertex = a.dst_vertex)
-
-*/
-/*
-      WHERE
-        old_src_p.type <> 'Input'
-*/
-
-    )
-/*
-    SELECT * FROM to_insert WHERE src_pos = 3 AND src_vertex = '416' --AND dst_pos = 3 
-*/
-    INSERT OR IGNORE INTO testparser_all_edges(src_pos,
-      src_vertex, dst_pos, dst_vertex)
-    SELECT
-      new.*
-    FROM
-      to_insert new
-/*
-        INNER JOIN old_edge o
-          ON (new.src_vertex = o.src AND new.dst_vertex = o.dst)
-*/
-  });
-
-  $self->_dbh->do(q{
-    DELETE FROM testparser_all_edges
-    WHERE
-      dst_pos <= (SELECT MAX(rowid) FROM testparser_input)
-      AND
-      dst_vertex = (SELECT vertex FROM view_final_vertex)
-  });
-
-  $self->_dbh->do(q{
-    DELETE FROM testparser_all_edges
-    WHERE
-      src_pos = dst_pos
-      AND
-      EXISTS (SELECT 1
-              FROM vertex_property
-              WHERE vertex = testparser_all_edges.src_vertex
-                AND type = 'Input')
-  }) if 0; # @
-
-  $self->_dbh->do(q{
-    DELETE FROM testparser_all_edges
-    WHERE
-      NOT EXISTS (SELECT 1
-                  FROM old_edge o
-                  WHERE o.src = testparser_all_edges.src_vertex
-                    AND o.dst = testparser_all_edges.dst_vertex)
-  }) if 1; # @
-
-  $self->_dbh->do(q{
-    WITH good_rowids AS (
+        t_shadowed
+      UNION
       SELECT
-        all_edges.rowid
+        forward_reachable.pos AS pos,
+        vs.shadows AS vertex
+      FROM 
+        forward_reachable
+          INNER JOIN vertex_shadows vs
+            ON (vs.vertex = forward_reachable.vertex)
+    ),
+    backward_edge AS (
+      SELECT
+        final_pos.pos AS src_pos,
+        old_edge.src AS src_vertex,
+        final_pos.pos AS dst_pos,
+        view_final_vertex.vertex AS dst_vertex
       FROM
-        old_edge o
-          INNER JOIN testparser_all_edges all_edges
-            ON (all_edges.src_vertex = o.src
-              AND all_edges.dst_vertex = o.dst)
+        view_final_vertex
+          INNER JOIN final_pos
+          INNER JOIN forward_reachable
+            ON (forward_reachable.pos = final_pos.pos
+              AND view_final_vertex.vertex = forward_reachable.vertex)
+          INNER JOIN old_edge
+            ON (old_edge.dst = view_final_vertex.vertex)
+      UNION
+      SELECT
+        backward_edge.src_pos - (old_edge_src_p.type = 'Input')
+          AS src_pos,
+        old_edge.src AS src_vertex,
+        backward_edge.src_pos AS dst_pos,
+        backward_edge.src_vertex AS dst_vertex
+      FROM
+        backward_edge
+          INNER JOIN old_edge
+            ON (backward_edge.src_vertex = old_edge.dst)
+          INNER JOIN vertex_property old_edge_dst_p
+            ON (old_edge_dst_p.vertex = old_edge.dst)
+          INNER JOIN vertex_property old_edge_src_p
+            ON (old_edge_src_p.vertex = old_edge.src)
+          INNER JOIN forward_reachable
+            ON (forward_reachable.vertex = old_edge.src
+              AND forward_reachable.pos = backward_edge.src_pos
+                -(old_edge_src_p.type = 'Input'))
     )
-    DELETE FROM testparser_all_edges
-    WHERE
-      rowid NOT IN (SELECT * FROM good_rowids)
-  }) if 0;
+    SELECT * FROM backward_edge
+    ;
+  });
 
   # TODO: why is this needed
   $self->_dbh->do(q{
@@ -517,32 +477,11 @@ sub _update_shadowed_testparser_all_edges {
         FROM
           testparser_input i
             INNER JOIN vertex_span s
-              ON (i.pos = testparser_all_edges.src_pos AND i.ord >= s.min AND i.ord <= s.max)
+              ON (i.pos = testparser_all_edges.src_pos
+                AND i.ord >= s.min AND i.ord <= s.max)
 
       )
   }) if 1; # @
-
-  $self->_dbh->do(q{
-    DROP TABLE t_vertex_shadows_or_self
-  });
-
-
-
-
-
-
-
-
-
-
-
-
-$self->_dbh->do(q{
-  DELETE FROM testparser_all_edges WHERE EXISTS (SELECT 1 FROM vertex_property WHERE vertex IN (testparser_all_edges.src_vertex) AND name LIKE '%#dfa%')
-}) if 0;
-
-
-
 }
 
 sub _create_forward {
