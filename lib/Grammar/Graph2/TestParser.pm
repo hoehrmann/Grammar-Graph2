@@ -387,8 +387,9 @@ sub _update_shadowed_testparser_all_edges {
   local $self->_dbh->{sqlite_allow_multiple_statements} = 1;
 
   $self->_dbh->do(q{
-    DROP TABLE IF EXISTS t_shadowed;
-    CREATE TABLE t_shadowed AS SELECT * FROM testparser_all_edges;
+    DROP TABLE IF EXISTS testparser_all_edges_shadowed;
+    CREATE TABLE testparser_all_edges_shadowed AS
+    SELECT * FROM testparser_all_edges;
     DELETE FROM testparser_all_edges;
     DROP TABLE testparser_all_edges;
 
@@ -412,7 +413,7 @@ sub _update_shadowed_testparser_all_edges {
         dst_pos AS pos,
         dst_vertex AS vertex
       FROM
-        t_shadowed
+        testparser_all_edges_shadowed t_shadowed
       UNION
       SELECT
         forward_reachable.pos AS pos,
@@ -421,6 +422,22 @@ sub _update_shadowed_testparser_all_edges {
         forward_reachable
           INNER JOIN vertex_shadows vs
             ON (vs.vertex = forward_reachable.vertex)
+          INNER JOIN vertex_property shadows_p
+            ON (vs.shadows = shadows_p.vertex)
+          LEFT JOIN testparser_input i
+            ON (i.pos = forward_reachable.pos)
+          LEFT JOIN vertex_span s
+            ON (s.vertex = vs.shadows
+              AND i.ord >= s.min
+              AND i.ord <= s.max)
+      WHERE
+        -- Grammar::Graph2::Automata, when creating vertices
+        -- representing DFA transitions, groups transitions sharing
+        -- the same source and destination state, in order to save
+        -- some space. That may group mutually exclusive Input
+        -- vertices under one vertex. Those that do not actually
+        -- match need to be filtered. TODO: maybe not worth it.
+        shadows_p.type <> 'Input' OR s.vertex IS NOT NULL
     ),
     backward_edge AS (
       SELECT
@@ -460,28 +477,6 @@ sub _update_shadowed_testparser_all_edges {
     ;
   });
 
-  # TODO: why is this needed
-  $self->_dbh->do(q{
-    DELETE FROM testparser_all_edges
-    WHERE
-      src_vertex NOT IN (
-        SELECT
-          vertex
-        FROM
-          vertex_property vertex_p
-        WHERE
-          type <> 'Input'
-        UNION ALL
-        SELECT
-          s.vertex
-        FROM
-          testparser_input i
-            INNER JOIN vertex_span s
-              ON (i.pos = testparser_all_edges.src_pos
-                AND i.ord >= s.min AND i.ord <= s.max)
-
-      )
-  }) if 1; # @
 }
 
 sub _create_forward {
