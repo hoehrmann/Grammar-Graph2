@@ -127,6 +127,9 @@ sub BUILD {
           ON (foo.dst < start_transitions.src)
   });
 
+  $self->g->g->set_graph_attribute('utf8_start_state',
+    $renumbering{ $dfa->{start_state} });
+
   return;
 
   use YAML::XS;

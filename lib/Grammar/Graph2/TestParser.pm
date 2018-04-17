@@ -112,14 +112,109 @@ sub create_match_enumerator {
   );
 }
 
+sub _file_to_byte_ords {
+  my ($input_path) = @_;
+
+  open my $f, '<:raw', $input_path;
+  my $chars = do { local $/; <$f> };
+  my @input = map { ord } split//, $chars;
+
+  return @input;
+}
+
 sub _file_to_ords {
   my ($input_path) = @_;
 
   open my $f, '<:utf8', $input_path;
-  my $chars = do { local $/; binmode $f; <$f> };
+  my $chars = do { local $/; <$f> };
   my @input = map { ord } split//, $chars;
 
   return @input;
+}
+
+sub _file_to_bytes_table {
+  my ($self) = @_;
+
+  local $self->_dbh->{sqlite_allow_multiple_statements} = 1;
+
+  my @ords = _file_to_byte_ords($self->input_path);
+  my $ix = 1;
+  my @data = map { [$ix++, $_] } @ords;
+
+  $self->_dbh->do(q{
+    DROP TABLE IF EXISTS testparser_input_bytes;
+    CREATE TABLE testparser_input_bytes(
+      pos INTEGER PRIMARY KEY,
+      ord INTEGER
+    );
+    INSERT INTO testparser_input_bytes(pos, ord)
+    SELECT
+      json_extract(each.value, '$[0]') AS pos,
+      json_extract(each.value, '$[1]') AS ord
+    FROM
+      json_each(?) each
+    ;
+  }, {}, $self->g->_json->encode(\@data));
+
+  die if $self->_dbh->selectrow_array(q{
+
+    WITH RECURSIVE
+    start_state AS (
+      SELECT CAST(attribute_value AS INT) AS state
+      FROM graph_attribute
+      WHERE attribute_name = 'utf8_start_state'
+    ),
+    start_pos AS (
+      SELECT 1 AS pos
+    ),
+    foo AS (
+      SELECT
+        0 AS is_char,
+        0 AS char_pos,
+        start_pos.pos AS byte_pos,
+        start_state.state AS state
+      FROM
+        start_pos
+          INNER JOIN start_state
+      UNION
+      SELECT
+        dst_class.class IS NOT NULL AS is_char,
+        CASE
+        WHEN dst_class.class IS NOT NULL THEN foo.char_pos + 1
+        ELSE foo.char_pos END AS char_pos,
+        foo.byte_pos + 1 AS byte_pos,
+        utf8_dfa.dst AS state
+      FROM
+        foo
+          INNER JOIN utf8_dfa 
+            ON (foo.state = utf8_dfa.src)
+          INNER JOIN testparser_input_bytes i
+            ON (i.pos = foo.byte_pos
+              AND i.ord >= utf8_dfa.min
+              AND i.ord <= utf8_dfa.max)
+          LEFT JOIN input_class src_class
+            ON (src_class.class = utf8_dfa.src)
+          LEFT JOIN input_class dst_class
+            ON (dst_class.class = utf8_dfa.dst)
+    )
+    SELECT
+      1
+    FROM
+      testparser_input
+        INNER JOIN input_class
+          ON (testparser_input.ord >= input_class.min
+            AND testparser_input.ord <= input_class.max)
+        INNER JOIN foo
+          ON (foo.is_char AND foo.char_pos = testparser_input.pos
+            AND input_class.class = foo.state)
+        LEFT JOIN testparser_input ref
+          ON (ref.pos = testparser_input.pos
+            AND ref.ord = testparser_input.ord)
+    WHERE
+      ref.pos IS NULL
+    ;
+
+  });
 }
 
 sub _file_to_table {
@@ -147,6 +242,8 @@ sub _file_to_table {
   $self->_dbh->commit();
 
   $self->_input_length( scalar @ords );
+
+  $self->_file_to_bytes_table();
 }
 
 sub _create_grammar_input_cross_product_idea {
