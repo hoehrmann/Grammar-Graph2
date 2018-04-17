@@ -51,6 +51,8 @@ for my $dir (sort @dirs) {
     base_path => $dir,
   );
 
+  $ts->g->_dbh->sqlite_backup_to_file( $ts->basename . '.sqlite' );
+
   for my $input_path ( sort $ts->input_file_paths ) {
 
     my $case = Grammar::Graph2::TestCase->new(

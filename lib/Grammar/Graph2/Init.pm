@@ -17,6 +17,7 @@ use Grammar::Graph2::TestParser::MatchEnumerator;
 use Grammar::Graph2::Topology;
 use Grammar::Graph2::Automata;
 use Grammar::Graph2::Megamata;
+use Grammar::Graph2::UTF8;
 
 use Memoize;
 use YAML::XS;
@@ -94,6 +95,8 @@ sub _init {
 
   $self->_create_input_classes();
   $self->_log->debug('done creating input_classes');
+
+  $self->_create_utf8();
 
   $self->_dbh->do(q{ ANALYZE });
   return;
@@ -580,6 +583,14 @@ sub _rename_vertices {
 #  $self->gp_dead_vertex('' . $map{$self->gp_dead_vertex()}->{rowid})
 #    if defined $self->gp_dead_vertex();
 
+}
+
+sub _create_utf8 {
+  my ($self) = @_;
+
+  my $utf8 = Grammar::Graph2::UTF8->new(
+    g => $self,
+  );
 }
 
 1;

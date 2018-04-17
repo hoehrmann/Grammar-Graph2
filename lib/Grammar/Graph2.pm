@@ -281,17 +281,17 @@ sub from_grammar_graph {
       p1,
       p2,
       partner,
+      run_list,
+      self_loop,
+      topo,
+      epsilon_group,
+      shadow_group,
       CAST( type IN (
         'Start', 'If', 'If1', 'If2',
         'Final', 'Fi', 'Fi1', 'Fi2'
       ) AS INT) AS is_stack,
       CAST(type IN ('Start', 'If', 'If1', 'If2') AS INT) AS is_push,
-      CAST(type IN ('Final', 'Fi', 'Fi1', 'Fi2') AS INT) AS is_pop,
-      run_list,
-      self_loop,
-      topo,
-      epsilon_group,
-      shadow_group
+      CAST(type IN ('Final', 'Fi', 'Fi1', 'Fi2') AS INT) AS is_pop
     FROM
       vertex_property
     ;
