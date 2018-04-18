@@ -288,9 +288,15 @@ sub _insert_dfa {
     CREATE INDEX idx_tconfiguration_vertex ON TConfiguration(vertex);
   });
 
+  # Each state and all (group of) transitions are mapped to new
+  # vertices in the grammar graph. Starting from a $base_id new
+  # vertices are assigned a computed number. States are mapped
+  # directly to their state_id, transitions come directly after
+  # based on their rowid.
+  
   my $tr_sth = $d->_dbh->prepare(q{
     SELECT
-      (SELECT MAX(rowid) FROM state) * tr.src + tr.dst AS via,
+      (SELECT MAX(state_id) FROM state) + tr.rowid AS via,
       tr.src AS src_state,
       json_group_array(m.input) AS first_ords,
       json_group_array(m.vertex) AS vertices,
@@ -307,9 +313,13 @@ sub _insert_dfa {
           ON (m.input = tr.input AND m.vertex = src_cfg.vertex)
     GROUP BY
       tr.src,
---      m.vertex,
+--      tr.input,
       tr.dst
   });
+
+  # GROUP BY tr.src, tr.input, tr.dst -> too many vertices
+  # GROUP BY tr.src, tr.dst -> shadowed vertices might not match
+  # TODO: There is a middle ground...
 
   $tr_sth->execute();
 

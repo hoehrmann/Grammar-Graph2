@@ -74,12 +74,16 @@ sub create_t {
 
 #=pod
 
+# =pod
+
   $self->_dbh->do(q{
     DELETE FROM testparser_all_edges;
   });
   $self->_dbh->do(q{
     INSERT INTO testparser_all_edges SELECT * FROM result;
   });
+
+# =cut
 
   # undoes _replace_conditionals
   $self->_update_shadowed_testparser_all_edges();
@@ -431,12 +435,14 @@ sub _update_shadowed_testparser_all_edges {
               AND i.ord >= s.min
               AND i.ord <= s.max)
       WHERE
+
         -- Grammar::Graph2::Automata, when creating vertices
         -- representing DFA transitions, groups transitions sharing
         -- the same source and destination state, in order to save
         -- some space. That may group mutually exclusive Input
         -- vertices under one vertex. Those that do not actually
-        -- match need to be filtered. TODO: maybe not worth it.
+        -- match need to be filtered. See comments there.
+
         shadows_p.type <> 'Input' OR s.vertex IS NOT NULL
     ),
     backward_edge AS (
