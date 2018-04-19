@@ -72,7 +72,7 @@ sub _init {
   $self->_replace_conditionals();
   $self->_log->debug('done _replace_conditionals');
 
-  $self->_cover_root();
+#  $self->_cover_root();
   $self->_log->debug('done cover root');
 
   $self->_cover_epsilons();
@@ -135,7 +135,7 @@ sub _cover_input_input_edges {
     FROM
       view_input_input_edges ii
         INNER JOIN (SELECT
-                      MAX(vertex_name) AS vertex
+                      MAX(vertex_name+0) AS vertex
                     FROM
                       vertex) max_vertex
   });

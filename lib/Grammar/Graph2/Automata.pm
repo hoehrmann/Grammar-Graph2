@@ -293,7 +293,7 @@ sub _insert_dfa {
   # vertices are assigned a computed number. States are mapped
   # directly to their state_id, transitions come directly after
   # based on their rowid.
-  
+
   my $tr_sth = $d->_dbh->prepare(q{
     SELECT
       (SELECT MAX(state_id) FROM state) + tr.rowid AS via,

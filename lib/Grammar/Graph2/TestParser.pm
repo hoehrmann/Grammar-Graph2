@@ -89,6 +89,13 @@ sub create_t {
   $self->_update_shadowed_testparser_all_edges();
   $self->_create_without_unreachable_vertices();
 
+  $self->_log->debugf("removed unreachable edges: %s",
+    $self->g->_json->encode($self->_dbh->selectall_arrayref(q{
+      SELECT * FROM testparser_all_edges
+      EXCEPT
+      SELECT * FROM result
+    })));
+
 #=cut
 
   $self->_dbh->do(q{ ANALYZE });
