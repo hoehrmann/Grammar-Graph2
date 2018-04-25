@@ -57,8 +57,7 @@ sub BUILD {
   Grammar::Graph2::TestViews->new( g => $self->g );
 }
 
-# TODO: rename to compute_t or whatever
-sub create_t {
+sub create_t_perlsql {
   my ($self) = @_;
 
   $self->_file_to_table();
@@ -87,6 +86,16 @@ sub create_t {
 
   # undoes _replace_conditionals
   $self->_update_shadowed_testparser_all_edges();
+}
+
+# TODO: rename to compute_t or whatever
+sub create_t {
+  my ($self) = @_;
+
+  $self->create_t_perlsql();
+
+  # <<< c++
+
   $self->_create_without_unreachable_vertices();
 
   $self->_log->debugf("removed unreachable edges: %s",
