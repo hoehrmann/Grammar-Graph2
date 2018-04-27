@@ -163,6 +163,10 @@ sub create_t {
 
   $self->_create_trees_bottom_up();
 
+  $self->_dbh->do(q{
+    DELETE FROM t
+    WHERE rowid NOT IN (SELECT id FROM view_top_down_reachable)
+  });
 }
 
 sub create_match_enumerator {

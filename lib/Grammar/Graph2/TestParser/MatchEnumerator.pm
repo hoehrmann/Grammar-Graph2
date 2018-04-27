@@ -63,12 +63,12 @@ sub BUILD {
 
   $self->_dbh->do(q{
     DROP TABLE IF EXISTS old_path;
-    CREATE TEMPORARY TABLE old_path(
+    CREATE TABLE old_path(
       row INT UNIQUE
     );
 
     DROP TABLE IF EXISTS new_path;
-    CREATE TEMPORARY TABLE new_path
+    CREATE TABLE new_path
     AS SELECT * FROM old_path LIMIT 0;
   });
 
@@ -90,6 +90,17 @@ sub _subtree_length {
   return 1 + $goal - ($start_ix);
 }
 
+sub all_matches {
+  my ($self) = @_;
+  my @result;
+
+  for (my $match; $match = $self->_next_match($match);) {
+    push @result, $match;
+  }
+
+  return @result;
+}
+
 sub random_match {
   my ($self) = @_;
 
@@ -100,17 +111,6 @@ sub random_match {
     $self->dst_pos,
     $self->dst_vertex
   );
-}
-
-sub all_matches {
-  my ($self) = @_;
-  my @result;
-
-  for (my $match; $match = $self->_next_match($match);) {
-    push @result, $match;
-  }
-
-  return @result;
 }
 
 sub _first_match {
@@ -245,6 +245,14 @@ sub _find_next_path_between_step {
 #warn "dst_pos not defined" unless defined $dst_pos;
 
   my $root = $self->_dbh->selectrow_hashref(q{
+    WITH
+    args AS (
+      SELECT
+        CAST(? AS INT) AS src_pos,
+        CAST(? AS TEXT) AS src_vertex,
+        CAST(? AS INT) AS dst_pos,
+        CAST(? AS TEXT) AS dst_vertex
+    )
     SELECT
       t.rowid AS rowid,
       mid_src_p.is_push AS mid_src_is_push,
@@ -271,13 +279,14 @@ sub _find_next_path_between_step {
             AND o.rowid
               -- except items to be replaced
               NOT BETWEEN r.rowid AND r.rowid + CAST(? AS INT) - 1)
+        LEFT JOIN args
 
     WHERE
       1 = 1
-      AND src_pos = CAST(? AS INT)
-      AND src_vertex = CAST(? AS TEXT)
-      AND dst_pos = CAST(? AS INT)
-      AND dst_vertex = CAST(? AS TEXT)
+      AND t.src_pos = args.src_pos
+      AND t.src_vertex = args.src_vertex
+      AND t.dst_pos = args.dst_pos
+      AND t.dst_vertex = args.dst_vertex
       AND c.row IS NULL -- no duplicates wrt to new_path
       AND o.row IS NULL -- no duplicates wrt to old_path
 
@@ -290,12 +299,13 @@ sub _find_next_path_between_step {
 
     LIMIT
       1
-  }, {}, $ix,
-         $len,
+  }, {},
          $src_pos,
          $src_vertex,
          $dst_pos,
          $dst_vertex,
+         $ix,
+         $len,
          $old_root,
          ($random_or_next eq 'random' ? undef : ''));
 
@@ -351,4 +361,29 @@ sub _find_next_path_between_step {
 1;
 
 __END__
+
+/*
+    t_row AS (
+      SELECT * FROM t WHERE t.rowid = ?
+    )
+    foo AS (
+      SELECT
+        mid_src_pos AS src_pos,
+        mid_src_vertex AS src_vertex,
+        mid_dst_pos AS dst_pos,
+        mid_dst_vertex AS dst_vertex
+      FROM
+        t_row t
+          INNER JOIN view_vp_plus mid_src_p
+            ON (mid_src_p.vertex = t.mid_src_vertex)
+      WHERE
+        mid_src_p.is_push
+      UNION
+        sibling1
+      UNION
+        sibling2
+    )
+    
+*/
+
 
