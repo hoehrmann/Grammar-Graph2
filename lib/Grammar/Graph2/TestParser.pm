@@ -86,17 +86,65 @@ sub create_t_perlsql {
 
   # undoes _replace_conditionals
   $self->_update_shadowed_testparser_all_edges();
+
+  $self->_create_without_unreachable_vertices();
 }
+
+sub create_t_cxx {
+  my ($self) = @_;
+
+  $self->_file_to_table();
+
+  $self->_dbh->sqlite_backup_to_file('/home/bjoern/parselov/cxx.sqlite');
+  `cd /home/bjoern/parselov ; perl /home/bjoern/parselov/alx.pl cxx.sqlite > /home/bjoern/parselov/alx/grammar.c`;
+  my $path = $self->input_path;
+#  warn "cxx $path";
+  `cd /home/bjoern/parselov/alx/ ; make ; /home/bjoern/parselov/alx/alx $path > /home/bjoern/parselov/cxx.json`;
+  open my $fh, '<', '/home/bjoern/parselov/cxx.json';
+  my $json = do { local $/; <$fh>; };
+
+  local $self->_dbh->{sqlite_allow_multiple_statements} = 1;
+  $self->_dbh->do(q{
+    DROP TABLE IF EXISTS result;
+    DROP TABLE IF EXISTS testparser_all_edges;
+    DROP TABLE IF EXISTS testparser_all_edges_shadowed;
+  });
+
+  $self->_dbh->do(q{
+    CREATE TABLE result AS 
+    SELECT
+      json_extract(each.value, '$[0]') AS src_pos,
+      CAST(json_extract(each.value, '$[1]') AS TEXT) AS src_vertex,
+      json_extract(each.value, '$[2]') AS dst_pos,
+      CAST(json_extract(each.value, '$[3]') AS TEXT) AS dst_vertex
+    FROM
+      json_each(?) each
+    UNION
+    SELECT
+      1,
+      view_start_vertex.vertex,
+      1,
+      old_edge.dst
+    FROM
+      view_start_vertex
+        INNER JOIN old_edge
+          ON (old_edge.src = view_start_vertex.vertex)
+    ;
+    CREATE TABLE testparser_all_edges AS
+    SELECT * FROM result;
+    CREATE TABLE testparser_all_edges_shadowed AS
+    SELECT * FROM result;
+  }, {}, $json);
+
+}
+
 
 # TODO: rename to compute_t or whatever
 sub create_t {
   my ($self) = @_;
 
   $self->create_t_perlsql();
-
-  # <<< c++
-
-  $self->_create_without_unreachable_vertices();
+#  $self->create_t_cxx();
 
   $self->_log->debugf("removed unreachable edges: %s",
     $self->g->_json->encode($self->_dbh->selectall_arrayref(q{
