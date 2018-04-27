@@ -48,6 +48,32 @@ has '_dbh' => (
   is       => 'rw',
 );
 
+has '_json' => (
+  is       => 'ro',
+  required => 0,
+  default  => sub {
+    JSON->new->canonical(1)->ascii(1)->indent(0)
+  },
+);
+
+sub BUILD {
+  my ($self) = @_;
+
+  local $self->_dbh->{sqlite_allow_multiple_statements} = 1;
+
+  $self->_dbh->do(q{
+    DROP TABLE IF EXISTS old_path;
+    CREATE TEMPORARY TABLE old_path(
+      row INT UNIQUE
+    );
+
+    DROP TABLE IF EXISTS new_path;
+    CREATE TEMPORARY TABLE new_path
+    AS SELECT * FROM old_path LIMIT 0;
+  });
+
+}
+
 sub _subtree_length {
   my ($match, $start_ix) = @_;
 
@@ -67,16 +93,6 @@ sub _subtree_length {
 sub random_match {
   my ($self) = @_;
 
-  $self->_dbh->do(q{
-    DROP TABLE IF EXISTS old_path
-  });
-
-  $self->_dbh->do(q{
-    CREATE TEMPORARY TABLE old_path(
-      row INT UNIQUE
-    )
-  });
-
   return $self->_find_next_path_between(
     "random",
     $self->src_pos,
@@ -90,45 +106,44 @@ sub all_matches {
   my ($self) = @_;
   my @result;
 
-  for (my $match; $match = $self->next_match($match);) {
+  for (my $match; $match = $self->_next_match($match);) {
     push @result, $match;
   }
 
   return @result;
 }
 
-sub next_match {
+sub _first_match {
+  my ($self) = @_;
+
+  return $self->_find_next_path_between(
+    "next",
+    $self->src_pos,
+    $self->src_vertex,
+    $self->dst_pos,
+    $self->dst_vertex
+  );
+}
+
+sub _next_match {
   my ($self, $prev_match) = @_;
 
-  $self->_dbh->do(q{
-    DROP TABLE IF EXISTS old_path
-  });
+  local $self->_dbh->{sqlite_allow_multiple_statements} = 1;
 
   $self->_dbh->do(q{
-    CREATE TEMPORARY TABLE old_path(
-      row INT UNIQUE
-    )
+    DELETE FROM old_path;
   });
 
-  if (not defined $prev_match) {
-    return $self->_find_next_path_between(
-      "next",
-      $self->src_pos,
-      $self->src_vertex,
-      $self->dst_pos,
-      $self->dst_vertex
-    );
-  }
+  return $self->_first_match unless defined $prev_match;
 
   my @old_path = @{ $prev_match->flat_path };
 
-  my $sth = $self->_dbh->prepare(q{
-    INSERT INTO old_path(row) VALUES(?)
-  });
-
-  $self->_dbh->begin_work();
-  $sth->execute($_) for @old_path;
-  $self->_dbh->commit;
+  $self->_dbh->do(q{
+    INSERT INTO old_path(row)
+    SELECT each.value AS row
+    FROM json_each(?) each
+    ;
+  }, {}, $self->_json->encode(\@old_path));
 
   my $sth_tuple_from_rowid = $self->_dbh->prepare_cached(q{
     SELECT
@@ -189,12 +204,8 @@ sub _find_next_path_between {
     $src_pos, $src_vertex, $dst_pos, $dst_vertex,
     $old_root, $ix, $len) = @_;
 
-  $self->_dbh->begin_work();
-
   $self->_dbh->do(q{
-    CREATE TEMPORARY TABLE new_path(
-      row INT UNIQUE
-    )
+    DELETE FROM new_path
   });
 
   my $sth = $self->_dbh->prepare(q{
@@ -216,12 +227,6 @@ sub _find_next_path_between {
   my @flat_path = map { $_->[0] } $self->_dbh->selectall_array(q{
     SELECT * FROM new_path ORDER BY rowid ASC
   });
-
-  $self->_dbh->do(q{
-    DROP TABLE IF EXISTS new_path
-  });
-
-  $self->_dbh->rollback;
 
   return unless grep { defined } @flat_path;
 
