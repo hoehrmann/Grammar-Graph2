@@ -45,13 +45,12 @@ sub _build_list {
   my $item = $self->_dbh->selectrow_hashref(q{
     SELECT
       t.rowid AS rowid,
-      mid_src_p.is_push AS mid_src_is_push,
+      -- mid_src_p.is_push AS mid_src_is_push,
       mid_src_p.is_pop AS mid_src_is_pop,
-      src_p.name AS src_name,
-      src_p.type AS src_type,
-      dst_p.name AS dst_name,
-      dst_p.type AS dst_type,
-      t.*
+      t.src_pos AS src_pos,
+      t.src_vertex AS src_vertex,
+      t.dst_pos AS dst_pos,
+      t.dst_vertex AS dst_vertex
     FROM
       t
         INNER JOIN view_vp_plus src_p
@@ -79,15 +78,6 @@ sub _build_list {
     [ $item->{dst_pos}, $item->{dst_vertex} ],
   ;
     
-  return 
-    sprintf(qq{%u,%s,%s,%u},
-      $item->{src_pos}, $item->{src_type},
-        $item->{src_name}, $item->{src_vertex}),
-    @children,
-    sprintf(qq{%u,%s,%s,%u},
-      $item->{dst_pos}, $item->{dst_type},
-        $item->{dst_name}, $item->{dst_vertex}),
-  ;
 }
 
 sub _build_tree {
@@ -129,7 +119,7 @@ sub _build_tree {
       push @stack, $stack[-1][1][-1];
     } elsif ($current->[3]) {
       $stack[-1][3] = $current->[0];
-      warn $stack[-1][0] . ' vs ' . $current->[4]
+      die $stack[-1][0] . ' vs ' . $current->[4]
         unless $stack[-1][0] eq $current->[4];
       pop @stack;
     } else {
@@ -170,6 +160,8 @@ sub to_json_tree {
 
 sub _pruned {
   my ($node) = @_;
+
+  # TODO: easier to filter match vertex list
 
   return $node unless @$node;
 
