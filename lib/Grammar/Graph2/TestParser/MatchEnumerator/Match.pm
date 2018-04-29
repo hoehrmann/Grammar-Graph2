@@ -140,7 +140,7 @@ sub to_tree {
   my ($self, %o) = @_;
 
   die if grep {
-    $_ !~ /^(pruned|rowids)$/
+    $_ !~ /^(pruned)$/
   } keys %o;
 
   my $node = _build_tree($self, [ @{ $self->flat_path } ], %o);
