@@ -167,6 +167,72 @@ sub create_t {
     DELETE FROM t
     WHERE rowid NOT IN (SELECT id FROM view_top_down_reachable)
   });
+
+  # The following two calls ensure that `result` includes only 
+  # edges that are part of some valid match, by taking into 
+  # account the work of `create_trees_bottom_up`.
+  $self->_update_testparser_all_edges_cleanup();
+  $self->_create_without_unreachable_vertices();
+}
+
+sub _update_testparser_all_edges_cleanup {
+  my ($self) = @_;
+
+  $self->_dbh->do(q{
+    WITH
+    in_t AS (
+      SELECT
+        t.src_pos AS pos,
+        t.src_vertex AS vertex
+      FROM
+        t
+          INNER JOIN view_top_down_reachable
+            ON (t.rowid = view_top_down_reachable.id)
+      UNION
+      SELECT
+        t.dst_pos AS pos,
+        t.dst_vertex AS vertex
+      FROM
+        t
+          INNER JOIN view_top_down_reachable
+            ON (t.rowid = view_top_down_reachable.id)
+    ),
+    bad_edge AS (
+      SELECT
+        testparser_all_edges.rowid AS id
+      FROM
+        testparser_all_edges
+          INNER JOIN view_vp_plus src_p 
+            ON (src_p.vertex = testparser_all_edges.src_vertex)
+          INNER JOIN view_vp_plus dst_p 
+            ON (dst_p.vertex = testparser_all_edges.dst_vertex)
+      WHERE
+        (
+          src_p.is_stack AND
+          NOT EXISTS (
+            SELECT 1
+            FROM in_t
+            WHERE testparser_all_edges.src_pos = in_t.pos
+              AND testparser_all_edges.src_vertex = in_t.vertex
+          )
+        )
+        OR
+        (
+          dst_p.is_stack AND
+          NOT EXISTS (
+            SELECT 1
+            FROM in_t
+            WHERE testparser_all_edges.dst_pos = in_t.pos
+              AND testparser_all_edges.dst_vertex = in_t.vertex
+          )
+        )
+    )
+    DELETE
+    FROM
+      testparser_all_edges
+    WHERE
+      testparser_all_edges.rowid IN (SELECT id FROM bad_edge)
+  });
 }
 
 sub create_match_enumerator {
@@ -759,6 +825,17 @@ sub _create_collapsed_to_stack_vertices {
   # FIXME: convert to view
 
   $self->_dbh->do(q{
+  WITH
+  skippable AS (
+    SELECT
+      vertex_p.vertex AS vertex
+    FROM
+      view_vp_plus vertex_p
+    WHERE
+      NOT(vertex_p.is_stack
+        -- AND vertex_p.self_loop <> 'no'
+        )
+  )
   INSERT INTO t
   WITH RECURSIVE planar(src_pos,
                         src_vertex,
@@ -800,7 +877,8 @@ sub _create_collapsed_to_stack_vertices {
         INNER JOIN view_vp_plus mid_p
           ON (mid_p.vertex = left_.dst_vertex)
     WHERE
-      NOT(COALESCE(mid_p.is_stack, 0))
+--      NOT(COALESCE(mid_p.is_stack, 0))
+      mid_p.vertex IN (SELECT vertex FROM skippable)
   )
   SELECT
     p.*
@@ -817,9 +895,9 @@ sub _create_collapsed_to_stack_vertices {
     AND COALESCE(src_p.is_stack, 0)
     AND COALESCE(dst_p.is_stack, 0)
     AND (
-      COALESCE(NOT(src_p.is_push
+      NOT(src_p.is_push
         AND dst_p.is_pop
-        AND src_p.partner <> dst_p.vertex), 1)
+        AND src_p.partner <> dst_p.vertex)
     )
   });
   

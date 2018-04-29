@@ -47,6 +47,8 @@ sub mega {
 
   # TODO: group start vertices by predecessor set
 
+  # TODO: does not really make sense to look at shadowings?
+
   my @edges = $dbh->selectall_array(q{
     WITH
     vertex_shadowed_by AS (

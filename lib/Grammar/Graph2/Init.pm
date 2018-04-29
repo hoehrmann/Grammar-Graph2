@@ -38,18 +38,6 @@ sub _init {
   );
 
   $self->_dbh->do(q{
-    DROP VIEW IF EXISTS view_start_vertex;
-    CREATE VIEW view_start_vertex AS
-    SELECT attribute_value AS vertex
-    FROM graph_attribute
-    WHERE attribute_name = 'start_vertex';
-
-    DROP VIEW IF EXISTS view_final_vertex;
-    CREATE VIEW view_final_vertex AS
-    SELECT attribute_value AS vertex
-    FROM graph_attribute
-    WHERE attribute_name = 'final_vertex';
-
     DROP TABLE IF EXISTS old_edge;
     CREATE TABLE old_edge(
       src REFERENCES Vertex(vertex_name) ON UPDATE CASCADE,
@@ -294,6 +282,8 @@ sub _new_cond {
   # TODO: This should check the contents of If1/If2 for "irregular"
   # and If1/If2 themselves for "linear" but the VIEW does not make
   # it easy at the moment to distinguish between the two cases.
+
+  # TODO: is this still the case? ^
 
   my ($if1_regular) = map { $_ ne 'linear' } $g2->_dbh->selectrow_array(q{
     SELECT self_loop

@@ -62,9 +62,11 @@ sub vp_p2             { _rw_vertex_attribute('p2',            @_) }
 sub vp_partner        { _rw_vertex_attribute('partner',       @_) }
 sub vp_run_list       { _rw_vertex_attribute('run_list',      @_) }
 sub vp_self_loop      { _rw_vertex_attribute('self_loop',     @_) }
+sub vp_contents_self_loop      { _rw_vertex_attribute('contents_self_loop',     @_) }
 sub vp_topo           { _rw_vertex_attribute('topo',          @_) }
 sub vp_epsilon_group  { _rw_vertex_attribute('epsilon_group', @_) }
 sub vp_shadow_group   { _rw_vertex_attribute('shadow_group',  @_) }
+sub vp_stack_group   { _rw_vertex_attribute('stack_group',  @_) }
 
 #####################################################################
 #
@@ -81,6 +83,11 @@ sub is_final_vertex    { vp_type(@_) eq 'Final'    }
 sub is_input_vertex    { vp_type(@_) eq 'Input'    }
 sub is_prelude_vertex  { vp_type(@_) eq 'Prelude'  }
 sub is_postlude_vertex { vp_type(@_) eq 'Postlude' }
+
+sub is_conditional_vertex {
+  my ($self, $v) = @_;
+  return ($self->vp_type($v) // '') =~ /^If|If1|If2|Fi|Fi1|Fi2$/;
+}
 
 sub is_terminal_vertex {
   is_input_vertex(@_) or
@@ -267,9 +274,11 @@ sub from_grammar_graph {
       partner REFERENCES Vertex(vertex_name) ON UPDATE CASCADE,
       run_list,
       self_loop DEFAULT 'no',
+      contents_self_loop DEFAULT 'no',
       topo INT,
       epsilon_group,
-      shadow_group
+      shadow_group,
+      stack_group REFERENCES Vertex(vertex_name) ON UPDATE CASCADE
     );
 
     DROP VIEW IF EXISTS view_vp_plus;
@@ -283,9 +292,11 @@ sub from_grammar_graph {
       partner,
       run_list,
       self_loop,
+      contents_self_loop,
       topo,
       epsilon_group,
       shadow_group,
+      stack_group,
       CAST( type IN (
         'Start', 'If', 'If1', 'If2',
         'Final', 'Fi', 'Fi1', 'Fi2'
@@ -306,6 +317,18 @@ sub from_grammar_graph {
 
     CREATE INDEX idx_vertex_shadows_shadows
       ON vertex_shadows(shadows);
+
+    DROP VIEW IF EXISTS view_start_vertex;
+    CREATE VIEW view_start_vertex AS
+    SELECT attribute_value AS vertex
+    FROM graph_attribute
+    WHERE attribute_name = 'start_vertex';
+
+    DROP VIEW IF EXISTS view_final_vertex;
+    CREATE VIEW view_final_vertex AS
+    SELECT attribute_value AS vertex
+    FROM graph_attribute
+    WHERE attribute_name = 'final_vertex';
   });
 
   my $self = $class->new(
@@ -351,6 +374,17 @@ sub from_grammar_graph {
 
   unlink 'TEST.sqlite';
 #  $dbh->sqlite_backup_to_file('TEST.sqlite');
+
+  $self->_dbh->sqlite_create_function(
+    '_json_array_uniq_sorted',
+    1,
+    sub {
+      my ($json_array) = @_;
+      return $self->_json->encode([
+        sort { $a cmp $b } uniq @{ $self->_json->decode($json_array) }
+      ]);
+    },
+  );
 
   $self->_init();
 

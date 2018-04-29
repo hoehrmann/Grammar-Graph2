@@ -14,6 +14,7 @@ use List::Util qw/uniq/;
 use JSON;
 use List::OrderBy;
 use List::StackBy;
+use Acme::Partitioner;
 
 has 'g' => (
   is       => 'ro',
@@ -244,6 +245,60 @@ sub BUILD {
     ;
 
     -----------------------------------------------------------------
+    -- view_relevant_stack_vertices
+    -----------------------------------------------------------------
+    DROP VIEW IF EXISTS view_relevant_stack_vertices;
+    CREATE VIEW view_relevant_stack_vertices AS
+    SELECT
+      vertex_p.vertex AS vertex
+    FROM
+      view_vp_plus vertex_p
+        INNER JOIN view_start_vertex
+        INNER JOIN view_final_vertex
+    WHERE
+      (vertex_p.is_stack AND vertex_p.self_loop <> 'no')
+      OR
+      (vertex_p.type IN ('If', 'If1', 'If2', 'Fi', 'Fi1', 'Fi2')
+        AND vertex_p.contents_self_loop <> 'no')
+      OR (vertex_p.vertex = view_start_vertex.vertex)
+      OR (vertex_p.vertex = view_final_vertex.vertex)
+    ;
+
+    -----------------------------------------------------------------
+    -- view_reverse_stack_closure
+    -----------------------------------------------------------------
+
+    DROP VIEW IF EXISTS view_reverse_stack_closure;
+    CREATE VIEW view_reverse_stack_closure(vertex, s_reachable) AS
+    WITH RECURSIVE
+    all_s_predecessors_and_self(root, v) AS (
+
+      SELECT vertex AS root, vertex AS v FROM vertex_property
+
+      UNION
+
+      SELECT
+        r.root,
+        Edge.src
+      FROM
+        Edge
+          INNER JOIN all_s_predecessors_and_self AS r
+            ON (Edge.dst = r.v)
+          INNER JOIN view_vp_plus AS dst_p
+            ON (Edge.dst = dst_p.vertex)
+      WHERE
+        dst_p.vertex NOT IN (
+          SELECT vertex FROM view_relevant_stack_vertices
+        )
+    )
+    SELECT
+      root AS vertex,
+      v AS s_reachable
+    FROM
+      all_s_predecessors_and_self
+    ;
+
+    -----------------------------------------------------------------
     -- view_next_stack
     -----------------------------------------------------------------
 
@@ -336,25 +391,56 @@ sub BUILD {
     -----------------------------------------------------------------
     DROP VIEW IF EXISTS view_contents_self_loop;
     CREATE VIEW view_contents_self_loop AS
+    WITH RECURSIVE
+    base AS (
+      SELECT
+        vertex,
+        self_loop
+      FROM
+        vertex_property
+      UNION
+      SELECT
+        vpc.parent AS vertex,
+        base.self_loop AS self_loop
+      FROM
+        base 
+          INNER JOIN view_parent_child vpc
+            ON (base.vertex = vpc.child)
+          INNER JOIN vertex_property parent_p
+            ON (parent_p.vertex = vpc.parent)
+          INNER JOIN vertex_property child_p
+            ON (child_p.vertex = vpc.child)
+    ),
+    cond AS (
+      -- ensures symmetry
+      SELECT
+        *
+      FROM
+        base
+      UNION
+      SELECT
+        vertex_p.partner,
+        base.self_loop
+      FROM
+        base
+          INNER JOIN vertex_property vertex_p
+            ON (vertex_p.vertex = base.vertex)
+      WHERE
+        vertex_p.partner IS NOT NULL
+    )
     SELECT
-      root_p.vertex,
-      MIN(reachable_p.self_loop) AS self_loop
+      vertex,
+      MIN(self_loop) AS self_loop
     FROM
-      view_vertices_between_self_and_partner b
-        INNER JOIN vertex_property root_p
-          ON (root_p.vertex = b.root)
-        INNER JOIN vertex_property reachable_p
-          ON (b.reachable = reachable_p.vertex)
-    WHERE
-      reachable_p.self_loop IS NOT NULL
+      cond
     GROUP BY
-      root_p.vertex
+      vertex
     ;
-
   });
 
   $self->_add_self_loop_attributes();
   $self->_add_topological_attributes();
+  $self->_add_stack_groups();
   $self->_dbh->do(q{ ANALYZE });
 }
 
@@ -370,6 +456,14 @@ sub _add_self_loop_attributes {
 
   $self->g->vp_self_loop(@$_)
     for @self_loop;
+
+  my @contents_self_loop = $self->_dbh->selectall_array(q{
+    SELECT vertex, self_loop
+    FROM view_contents_self_loop
+  });
+
+  $self->g->vp_contents_self_loop(@$_)
+    for @contents_self_loop;
 }
 
 sub _strongly_connected_graph_feather {
@@ -561,6 +655,106 @@ sub _add_topological_attributes {
       for @$current
   }
 
+}
+
+sub _add_stack_groups {
+  my ($self) = @_;
+
+  my @stack_groups = $self->_dbh->selectall_array(q{
+    WITH
+    ordered AS (
+      SELECT
+        rs.*
+      FROM
+        view_reverse_stack_closure rs
+          INNER JOIN view_relevant_stack_vertices rv
+            ON (rs.s_reachable = rv.vertex)
+          LEFT JOIN view_relevant_stack_vertices rr
+            ON (rs.vertex = rr.vertex)
+      WHERE
+        rr.vertex IS NULL
+      ORDER BY
+        rs.vertex
+    ),
+    grouped AS (
+      SELECT
+        ordered.vertex AS vertex,
+        /**/_json_array_uniq_sorted/**/(
+          json_group_array(ordered.s_reachable)
+        ) AS s_reachable
+      FROM
+        ordered
+      GROUP BY
+        ordered.vertex
+    ),
+    final AS (
+      SELECT
+        json_group_array(vertex) AS vertices,
+        s_reachable AS grouping
+      FROM
+        grouped
+      GROUP BY 
+        s_reachable  
+    ),
+    single AS (
+      SELECT
+        json_group_array(json(vertices)) AS single
+      FROM
+        final
+      GROUP BY 
+        NULL
+    ),
+    vertex_stack_group AS (
+      SELECT
+        each_inner.value AS vertex,
+        each_outer.key + 1 AS stack_group
+      FROM
+        single
+          INNER JOIN json_each(single.single) each_outer
+          INNER JOIN json_each(each_outer.value) each_inner
+    ),
+    group_min_vertex AS (
+      SELECT
+        vsg.stack_group,
+        vertex_p.type = 'Input' AS is_input,
+        MIN(vsg.vertex) AS min_vertex
+      FROM
+        vertex_stack_group vsg
+          INNER JOIN vertex_property vertex_p
+            ON (vertex_p.vertex = vsg.vertex
+              AND vertex_p.type = 'Input')
+      GROUP BY
+        vsg.stack_group
+      UNION
+      SELECT
+        vsg.stack_group,
+        vertex_p.type = 'Input' AS is_input,
+        MIN(vsg.vertex) AS min_vertex
+      FROM
+        vertex_stack_group vsg
+          INNER JOIN vertex_property vertex_p
+            ON (vertex_p.vertex = vsg.vertex
+              AND vertex_p.type <> 'Input')
+      GROUP BY
+        vsg.stack_group
+    ),
+    result AS (
+      SELECT
+        vsg.vertex AS vertex,
+        gmv.min_vertex AS stack_group
+      FROM
+        vertex_stack_group vsg
+          INNER JOIN vertex_property vertex_p
+            ON (vsg.vertex = vertex_p.vertex)
+          INNER JOIN group_min_vertex gmv
+            ON (gmv.stack_group = vsg.stack_group
+              AND gmv.is_input = (vertex_p.type = 'Input'))
+    )
+    SELECT * FROM result
+  });
+
+  $self->g->vp_stack_group(@$_)
+    for @stack_groups;
 }
 
 1;
