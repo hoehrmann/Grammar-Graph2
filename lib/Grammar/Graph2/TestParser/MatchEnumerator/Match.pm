@@ -27,7 +27,15 @@ has '_log' => (
   },
 );
 
-sub _build_tree {
+has '_json' => (
+  is       => 'ro',
+  required => 0,
+  default  => sub {
+    JSON->new->canonical(1)->ascii(1)->indent(0)
+  },
+);
+
+sub _build_list {
   my ($self, $todo, %o) = @_;
 
   my $e = shift @$todo;
@@ -40,11 +48,16 @@ sub _build_tree {
       mid_src_p.is_push AS mid_src_is_push,
       mid_src_p.is_pop AS mid_src_is_pop,
       src_p.name AS src_name,
+      src_p.type AS src_type,
+      dst_p.name AS dst_name,
+      dst_p.type AS dst_type,
       t.*
     FROM
       t
         INNER JOIN view_vp_plus src_p
           ON (src_p.vertex = t.src_vertex)
+        INNER JOIN view_vp_plus dst_p
+          ON (dst_p.vertex = t.dst_vertex)
         LEFT JOIN view_vp_plus mid_src_p
           ON (mid_src_p.vertex = t.mid_src_vertex)
     WHERE
@@ -52,19 +65,79 @@ sub _build_tree {
   }, {}, $e);
 
   my @children = (
-    _build_tree($self, $todo, %o),
-    _build_tree($self, $todo, %o),
+    _build_list($self, $todo, %o),
+    _build_list($self, $todo, %o),
   );
 
-  return [
-    (!$item->{mid_src_is_pop}
-      ? ($item->{src_name} // '')
-      : '') . ( $o{rowids} ? (':' . $e) : '' ),
+  if ($item->{mid_src_is_pop}) {
+    return @children;
+  }
 
-    \@children,
-    $item->{src_pos},
-    $item->{dst_pos},
-  ];
+  return
+    [ $item->{src_pos}, $item->{src_vertex} ],
+    @children,
+    [ $item->{dst_pos}, $item->{dst_vertex} ],
+  ;
+    
+  return 
+    sprintf(qq{%u,%s,%s,%u},
+      $item->{src_pos}, $item->{src_type},
+        $item->{src_name}, $item->{src_vertex}),
+    @children,
+    sprintf(qq{%u,%s,%s,%u},
+      $item->{dst_pos}, $item->{dst_type},
+        $item->{dst_name}, $item->{dst_vertex}),
+  ;
+}
+
+sub _build_tree {
+  my ($self, $todo, %o) = @_;
+  my @list = $self->_build_list($todo);
+
+  my @augmented = $self->_dbh->selectall_array(q{
+    WITH
+    base AS (
+      SELECT
+        each.key AS sort_key,
+        CAST(json_extract(each.value, '$[0]') AS INT) AS pos,
+        CAST(json_extract(each.value, '$[1]') AS TEXT) AS vertex
+      FROM
+        json_each(?) each
+    )
+    SELECT
+      base.pos AS src_pos,
+      base.vertex AS src_vertex,
+      vertex_p.is_push,
+      vertex_p.is_pop,
+      COALESCE(vertex_p.name, '') AS name
+    FROM
+      base
+        INNER JOIN view_vp_plus vertex_p
+          ON (vertex_p.vertex = base.vertex)
+    ORDER BY
+      base.sort_key
+  }, {}, $self->_json->encode(\@list));
+
+  my $result = [];
+  my @stack = ($result);
+
+  while (@augmented) {
+    my $current = shift @augmented;
+    if ($current->[2]) {
+      push @{ $stack[-1][1] },
+        [ $current->[4], [], $current->[0] ];
+      push @stack, $stack[-1][1][-1];
+    } elsif ($current->[3]) {
+      $stack[-1][3] = $current->[0];
+      warn $stack[-1][0] . ' vs ' . $current->[4]
+        unless $stack[-1][0] eq $current->[4];
+      pop @stack;
+    } else {
+
+    }
+  }
+
+  return $result->[1]->[0];
 }
 
 sub to_tree {
