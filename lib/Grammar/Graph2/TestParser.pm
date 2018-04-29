@@ -892,8 +892,10 @@ sub _create_collapsed_to_stack_vertices {
         ON (mid_src_p.vertex = p.mid_src_vertex)
   WHERE
     1 = 1
-    AND COALESCE(src_p.is_stack, 0)
-    AND COALESCE(dst_p.is_stack, 0)
+--    AND COALESCE(src_p.is_stack, 0)
+--    AND COALESCE(dst_p.is_stack, 0)
+    AND src_p.vertex NOT IN (SELECT vertex FROM skippable)
+    AND dst_p.vertex NOT IN (SELECT vertex FROM skippable)
     AND (
       NOT(src_p.is_push
         AND dst_p.is_pop
