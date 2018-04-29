@@ -80,9 +80,8 @@ sub _build_list {
     
 }
 
-sub _build_tree {
-  my ($self, $todo, %o) = @_;
-  my @list = $self->_build_list($todo);
+sub _build_tree_from_vertex_list {
+  my ($self, $list, %o) = @_;
 
   my @augmented = $self->_dbh->selectall_array(q{
     WITH
@@ -106,7 +105,7 @@ sub _build_tree {
           ON (vertex_p.vertex = base.vertex)
     ORDER BY
       base.sort_key
-  }, {}, $self->_json->encode(\@list));
+  }, {}, $self->_json->encode($list));
 
   my $result = [];
   my @stack = ($result);
@@ -128,6 +127,13 @@ sub _build_tree {
   }
 
   return $result->[1]->[0];
+}
+
+sub _build_tree {
+  my ($self, $todo, %o) = @_;
+  my @list = $self->_build_list($todo);
+
+  return $self->_build_tree_from_vertex_list(\@list, %o);
 }
 
 sub to_tree {
