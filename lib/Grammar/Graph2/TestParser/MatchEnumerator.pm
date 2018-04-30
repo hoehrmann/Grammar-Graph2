@@ -358,6 +358,102 @@ sub _find_next_path_between_step {
 
 }
 
+sub _first_planar_path_between {
+  my ($self, $src_pos, $src_vertex, $dst_pos, $dst_vertex) = @_;
+
+  my @foo = $self->_dbh->selectall_array(q{
+    WITH bounds AS (
+      SELECT CAST(? AS INT) AS lower,
+      SELECT CAST(? AS INT) AS upper
+    )
+    SELECT
+      printf('[%u,"%u"]', src_pos, src_vertex) AS src,
+      printf('[%u,"%u"]', dst_pos, dst_vertex) AS dst
+    FROM
+      result
+    WHERE
+      src_pos BETWEEN bounds.lower AND bounds.upper
+      AND
+      dst_pos BETWEEN bounds.lower AND bounds.upper
+  }, {}, $src_pos, $dst_pos);
+
+  my $tmp = Graph::Feather->new(
+    edges => [ @foo ],
+  );
+
+  my $src = sprintf('[%u,"%u"]', $src_pos, $src_vertex);
+  my $dst = sprintf('[%u,"%u"]', $dst_pos, $dst_vertex);
+
+  my @between = graph_vertices_between($tmp, $src, $dst);
+
+  die unless @between;
+
+  # TODO(bh): check that `graph_vertices_between` returns
+  # an empty list if there is no path between $src and $dst
+
+  graph_delete_vertices_except($tmp, @between);
+  $tmp->feather_delete_edges($tmp->edges_from($dst));
+
+  my @match = $tmp->{dbh}->selectrow_array(q{
+    SELECT
+      Edge.rowid
+    FROM
+      Edge
+    WHERE
+      Edge.src = CAST(? AS TEXT)
+    ORDER BY
+      Edge.rowid
+    LIMIT 1
+  }, {}, $src);
+
+  while (1) {
+    # find first successor not yet in @match
+
+    my ($next) = $self->_dbh->selectrow_array(
+      q{
+        WITH
+        args AS (
+          SELECT
+            CAST(? AS INT) AS last_rowid,
+            CAST(? AS TEXT) AS all_rowids
+        ),
+        last AS (
+          SELECT
+            Edge.src AS src
+            Edge.dst AS dst,
+          FROM
+            args
+              INNER JOIN Edge
+                ON (args.last_rowid = Edge.rowid)
+        )
+        SELECT
+          Edge.rowid
+        FROM
+          Edge
+        WHERE
+          Edge.src = last.dst
+          AND
+          Edge.rowid NOT IN (
+            SELECT
+              CAST(each.value AS INT)
+            FROM args
+              INNER JOIN json_each(args.all_rowids) each
+          )
+        ORDER BY
+          Edge.rowid
+        LIMIT 1
+      },
+      {},
+      $match[-1],
+      $self->_json->encode(\@match)
+    );
+
+    last unless defined $next;
+  }
+
+  return @match;
+}
+
 1;
 
 __END__
@@ -387,3 +483,7 @@ __END__
 */
 
 
+            CAST(json_extract(Edge.src, '$[0]') AS INT) AS src_pos,
+            CAST(json_extract(Edge.src, '$[1]') AS TEXT) AS src_vertex,
+            CAST(json_extract(Edge.dst, '$[0]') AS INT) AS dst_pos,
+            CAST(json_extract(Edge.dst, '$[1]') AS TEXT) AS dst_vertex
