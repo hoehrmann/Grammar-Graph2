@@ -407,7 +407,7 @@ sub _first_planar_path_between {
   }, {}, $src);
 
   while (1) {
-    # find first successor not yet in @match
+    # find first following Edge not yet in @match
 
     my ($next) = $self->_dbh->selectrow_array(
       q{

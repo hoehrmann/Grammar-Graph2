@@ -835,6 +835,8 @@ sub _create_collapsed_to_stack_vertices {
       NOT(vertex_p.is_stack
         -- AND vertex_p.self_loop <> 'no'
         )
+    EXCEPT SELECT vertex FROM view_start_vertex
+    EXCEPT SELECT vertex FROM view_final_vertex
   )
   INSERT INTO t
   WITH RECURSIVE planar(src_pos,
@@ -877,7 +879,6 @@ sub _create_collapsed_to_stack_vertices {
         INNER JOIN view_vp_plus mid_p
           ON (mid_p.vertex = left_.dst_vertex)
     WHERE
---      NOT(COALESCE(mid_p.is_stack, 0))
       mid_p.vertex IN (SELECT vertex FROM skippable)
   )
   SELECT
@@ -892,8 +893,6 @@ sub _create_collapsed_to_stack_vertices {
         ON (mid_src_p.vertex = p.mid_src_vertex)
   WHERE
     1 = 1
---    AND COALESCE(src_p.is_stack, 0)
---    AND COALESCE(dst_p.is_stack, 0)
     AND src_p.vertex NOT IN (SELECT vertex FROM skippable)
     AND dst_p.vertex NOT IN (SELECT vertex FROM skippable)
     AND (
