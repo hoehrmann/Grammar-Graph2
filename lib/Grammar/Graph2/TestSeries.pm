@@ -32,6 +32,7 @@ has 'g' => (
   is       => 'ro',
   required => 0,
   writer   => '_set_g',
+  weak_ref => 1,
 );
 
 has '_log' => (

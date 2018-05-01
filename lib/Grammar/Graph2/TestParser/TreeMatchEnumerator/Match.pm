@@ -12,6 +12,7 @@ use Types::Standard qw/:all/;
 has '_dbh' => (
   is       => 'rw',
   required => 1,
+  weak_ref => 1,
 );
 
 has 'flat_path' => (

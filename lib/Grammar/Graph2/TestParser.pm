@@ -27,6 +27,7 @@ has 'input_path' => (
 has 'g' => (
   is       => 'ro',
   required => 1,
+  weak_ref => 1,
 );
 
 has '_log' => (
@@ -35,6 +36,7 @@ has '_log' => (
   default  => sub {
     Log::Any->get_logger()
   },
+
 );
 
 has '_input_length' => (
@@ -44,6 +46,7 @@ has '_input_length' => (
 
 has '_dbh' => (
   is       => 'rw',
+  weak_ref => 1,
 );
 
 sub BUILD {

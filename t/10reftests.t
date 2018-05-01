@@ -86,11 +86,13 @@ eval {
       $path_prefix . ' grammar_self_loops' or diag(
         Dump $got->{grammar_self_loops}
       );
+
 };
 
 warn if $@;
 
   }
+
 }
 
 done_testing();
