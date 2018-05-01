@@ -171,12 +171,14 @@ sub create_t {
   # The following two calls ensure that `result` includes only 
   # edges that are part of some valid match, by taking into 
   # account the work of `create_trees_bottom_up`.
-  $self->_update_testparser_all_edges_cleanup();
-  $self->_create_without_unreachable_vertices();
+#  $self->_update_testparser_all_edges_cleanup();
+#  $self->_create_without_unreachable_vertices();
 }
 
 sub _update_testparser_all_edges_cleanup {
   my ($self) = @_;
+
+  # FIXME: as-is incompatible with hiding non-recs
 
   $self->_dbh->do(q{
     WITH
@@ -241,7 +243,7 @@ sub create_match_enumerator {
   # FIXME: dbh passing, g
   return Grammar::Graph2::TestParser::MatchEnumerator->new(
     _dbh => $self->_dbh,
-    g => undef,
+    g => $self->g,
 
     src_pos => 1,
     src_vertex => $self->g->gp_start_vertex(),
@@ -833,7 +835,7 @@ sub _create_collapsed_to_stack_vertices {
       view_vp_plus vertex_p
     WHERE
       NOT(vertex_p.is_stack
-        -- AND vertex_p.self_loop <> 'no'
+        AND vertex_p.self_loop <> 'no'
         )
     EXCEPT SELECT vertex FROM view_start_vertex
     EXCEPT SELECT vertex FROM view_final_vertex

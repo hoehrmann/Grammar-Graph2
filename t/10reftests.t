@@ -54,7 +54,7 @@ for my $dir (sort @dirs) {
   $ts->g->_dbh->sqlite_backup_to_file( $ts->basename . '.sqlite' );
 
   for my $input_path ( sort $ts->input_file_paths ) {
-
+eval {
     my $case = Grammar::Graph2::TestCase->new(
       series => $ts,
       input_path => $input_path,
@@ -86,6 +86,9 @@ for my $dir (sort @dirs) {
       $path_prefix . ' grammar_self_loops' or diag(
         Dump $got->{grammar_self_loops}
       );
+};
+
+warn if $@;
 
   }
 }

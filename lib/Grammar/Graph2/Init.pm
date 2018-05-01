@@ -60,7 +60,7 @@ sub _init {
   $self->_replace_conditionals();
   $self->_log->debug('done _replace_conditionals');
 
-  $self->_cover_root();
+#  $self->_cover_root();
   $self->_log->debug('done cover root');
 
   $self->_cover_epsilons();
