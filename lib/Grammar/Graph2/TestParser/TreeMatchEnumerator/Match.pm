@@ -28,14 +28,6 @@ has '_log' => (
   },
 );
 
-has '_json' => (
-  is       => 'ro',
-  required => 0,
-  default  => sub {
-    JSON->new->canonical(1)->ascii(1)->indent(0)
-  },
-);
-
 sub _build_list {
   my ($self, $todo, %o) = @_;
 

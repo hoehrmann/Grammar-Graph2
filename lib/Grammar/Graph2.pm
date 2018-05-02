@@ -302,7 +302,31 @@ sub from_grammar_graph {
         'Final', 'Fi', 'Fi1', 'Fi2'
       ) AS INT) AS is_stack,
       CAST(type IN ('Start', 'If', 'If1', 'If2') AS INT) AS is_push,
-      CAST(type IN ('Final', 'Fi', 'Fi1', 'Fi2') AS INT) AS is_pop
+      CAST(type IN ('Final', 'Fi', 'Fi1', 'Fi2') AS INT) AS is_pop,
+      
+      -- FIXME: does not consider Ifs properly
+      CAST(
+        NOT(self_loop <> 'no' AND type IN (
+          'Start', 'If', 'If1', 'If2',
+          'Final', 'Fi', 'Fi1', 'Fi2'
+        )
+
+/*
+        AND
+        NOT(type IN (
+          'If', 'If1', 'If2',
+          'Fi', 'Fi1', 'Fi2'
+        ))
+*/
+
+/*        
+        AND
+        NOT(type IN (
+          'If', 'If1', 'If2',
+          'Fi', 'Fi1', 'Fi2'
+        ) AND contents_self_loop <> 'no')
+*/
+      ) AS INT) AS is_skippable
     FROM
       vertex_property
     ;

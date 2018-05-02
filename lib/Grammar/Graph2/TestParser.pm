@@ -174,8 +174,9 @@ sub create_t {
   # The following two calls ensure that `result` includes only 
   # edges that are part of some valid match, by taking into 
   # account the work of `create_trees_bottom_up`.
-#  $self->_update_testparser_all_edges_cleanup();
-#  $self->_create_without_unreachable_vertices();
+
+  $self->_update_testparser_all_edges_cleanup();
+  $self->_create_without_unreachable_vertices();
 }
 
 sub _update_testparser_all_edges_cleanup {
@@ -213,7 +214,8 @@ sub _update_testparser_all_edges_cleanup {
             ON (dst_p.vertex = testparser_all_edges.dst_vertex)
       WHERE
         (
-          src_p.is_stack AND
+          NOT(src_p.is_skippable)
+          AND
           NOT EXISTS (
             SELECT 1
             FROM in_t
@@ -223,7 +225,8 @@ sub _update_testparser_all_edges_cleanup {
         )
         OR
         (
-          dst_p.is_stack AND
+          NOT(dst_p.is_skippable)
+          AND
           NOT EXISTS (
             SELECT 1
             FROM in_t
@@ -238,6 +241,69 @@ sub _update_testparser_all_edges_cleanup {
     WHERE
       testparser_all_edges.rowid IN (SELECT id FROM bad_edge)
   });
+
+  # FIXME: bad workaround
+  $self->_dbh->do(q{
+    DELETE
+    FROM
+      testparser_all_edges
+    WHERE
+      testparser_all_edges.rowid IN (
+        SELECT
+          if2.rowid
+        FROM
+          testparser_all_edges if1
+            INNER JOIN testparser_all_edges if2
+              ON (if1.src_vertex = if2.src_vertex 
+                AND if1.src_pos = if2.src_pos)
+            INNER JOIN view_vp_plus src_p
+              ON (src_p.vertex = if1.src_vertex
+                AND src_p.type = 'If'
+                AND src_p.is_skippable
+                AND src_p.name = '#ordered_choice')
+            INNER JOIN vertex_property if2_p
+              ON (if2.dst_vertex = if2_p.vertex
+                AND if2_p.type = 'If2')
+            INNER JOIN vertex_property if1_p
+              ON (if1.dst_vertex = if1_p.vertex
+                AND if1_p.type = 'If1')
+      )
+  });
+
+  # FIXME: bad workaround
+  $self->_dbh->do(q{
+    DELETE
+    FROM
+      testparser_all_edges
+    WHERE
+      testparser_all_edges.rowid IN (
+        SELECT
+          e.rowid
+        FROM
+          view_vp_plus if_p
+            INNER JOIN vertex_property if1_p
+              ON (if1_p.vertex = if_p.p1
+                AND if_p.name = '#exclusion'
+                AND if_p.type = 'If'
+                AND if_p.is_skippable)
+            INNER JOIN vertex_property if2_p
+              ON (if2_p.vertex = if_p.p2)
+            INNER JOIN testparser_all_edges e
+              ON (e.src_vertex = if_p.vertex)
+            LEFT JOIN testparser_all_edges eif1
+              ON (eif1.src_pos = e.src_pos
+                AND eif1.src_vertex = e.src_vertex
+                AND eif1.dst_vertex = if1_p.vertex)
+            LEFT JOIN testparser_all_edges eif2
+              ON (eif2.src_pos = e.src_pos
+                AND eif2.src_vertex = e.src_vertex
+                AND eif2.dst_vertex = if2_p.vertex)
+        WHERE
+          eif2.rowid IS NOT NULL
+      )
+  });
+
+
 }
 
 sub create_match_enumerator {
@@ -837,9 +903,7 @@ sub _create_collapsed_to_stack_vertices {
     FROM
       view_vp_plus vertex_p
     WHERE
-      NOT(vertex_p.is_stack
-        AND vertex_p.self_loop <> 'no'
-        )
+      vertex_p.is_skippable
     EXCEPT SELECT vertex FROM view_start_vertex
     EXCEPT SELECT vertex FROM view_final_vertex
   )

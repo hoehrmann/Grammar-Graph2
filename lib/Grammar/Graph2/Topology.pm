@@ -438,6 +438,7 @@ sub BUILD {
     GROUP BY
       vertex
     ;
+
   });
 
   $self->_add_self_loop_attributes();

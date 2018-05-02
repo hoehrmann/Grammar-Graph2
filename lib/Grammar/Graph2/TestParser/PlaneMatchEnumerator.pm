@@ -63,12 +63,20 @@ has '_subgraph' => (
   is => 'rw', # FIXME
 );
 
+sub _src {
+  my ($self) = @_;
+  return sprintf('[%u,"%u"]', $self->src_pos, $self->src_vertex);
+}
+
+sub _dst {
+  my ($self) = @_;
+  return sprintf('[%u,"%u"]', $self->dst_pos, $self->dst_vertex);
+}
+
 sub BUILD {
   my ($self) = @_;
 
 #  local $self->_dbh->{sqlite_allow_multiple_statements} = 1;
-
-  # FIXME: interior vertices must not be irregular
 
   my @foo = $self->g->_dbh->selectall_array(q{
     WITH
@@ -105,50 +113,87 @@ sub BUILD {
     edges => [ @foo ],
   );
 
-  my $src = sprintf('[%u,"%u"]', $self->src_pos, $self->src_vertex);
-  my $dst = sprintf('[%u,"%u"]', $self->dst_pos, $self->dst_vertex);
-
-  my @between = graph_vertices_between($tmp, $src, $dst);
+  my @between = graph_vertices_between($tmp, $self->_src, $self->_dst);
 
   if (not @between) {
-    warn "No vertices between $src and $dst";
+    warn "No vertices between src and dst";
   }
 
   # TODO(bh): check that `graph_vertices_between` returns
   # an empty list if there is no path between $src and $dst
 
   graph_delete_vertices_except($tmp, @between);
-  $tmp->feather_delete_edges($tmp->edges_from($dst));
+
+  # FIXME: unsure about this
+  $tmp->feather_delete_edges($tmp->edges_from($self->_dst))
+    unless $self->_dst eq $self->_src;
 
   $self->_subgraph($tmp);
 }
 
 sub _next_match {
   my ($self, $prev_match) = @_;
-  return $self->_first_planar_path_between() unless defined $prev_match;
-  return;
-  ...
+
+  return undef unless $self->_subgraph->has_vertex($self->_src);
+
+  if (not defined $prev_match) {
+    my @match = $self->_first_rowid();
+    return $self->_next_planar_path_between(undef, @match);
+  }
+
+#  return;
+
+  my @path = @{ $prev_match->flat_path };
+  my @old_path = @path;
+
+  while (@path) {
+
+#    warn "trying to replace at $#path";
+
+    my $last_rowid = pop @path;
+
+    my $match = $self->_next_planar_path_between(
+      $last_rowid, @path);
+
+    if ($match) {
+      my @new_path = @{ $match->flat_path };
+#      warn "found match\n  old: @old_path\n  new: @new_path";
+      return $match;
+    }
+
+  }
+
+  return undef;
 }
 
-sub _first_planar_path_between {
+sub _first_rowid {
+  # TODO: add parameter for "random/ordered"
   my ($self) = @_;
 
-  my $tmp = $self->_subgraph;
-
-  my $src = sprintf('[%u,"%u"]', $self->src_pos, $self->src_vertex);
-  my $dst = sprintf('[%u,"%u"]', $self->dst_pos, $self->dst_vertex);
-
-  my @match = $tmp->{dbh}->selectrow_array(q{
+  my @match = $self->_subgraph->{dbh}->selectrow_array(q{
+    WITH
+    args AS (
+      SELECT
+        CAST(? AS TEXT) AS start
+    )
     SELECT
       Edge.rowid
     FROM
       Edge
+        INNER JOIN args
     WHERE
-      Edge.src = CAST(? AS TEXT)
+      Edge.src = args.start
     ORDER BY
-      Edge.rowid
+      Edge.rowid ASC
     LIMIT 1
-  }, {}, $src);
+  }, {}, $self->_src);
+
+  return @match;  
+}
+
+sub _next_planar_path_between {
+  # TODO: add parameter for "random/ordered"
+  my ($self, $first_must_not_be, @match) = @_;
 
   while (1) {
     # find first following Edge not yet in @match
@@ -158,6 +203,7 @@ sub _first_planar_path_between {
         WITH
         args AS (
           SELECT
+            CAST(? AS INT) AS blocked_rowid,
             CAST(? AS INT) AS last_rowid,
             CAST(? AS TEXT) AS all_rowids
         ),
@@ -175,6 +221,7 @@ sub _first_planar_path_between {
         FROM
           Edge
             INNER JOIN last
+            INNER JOIN args
         WHERE
           Edge.src = last.dst
           AND
@@ -184,17 +231,28 @@ sub _first_planar_path_between {
             FROM args
               INNER JOIN json_each(args.all_rowids) each
           )
+          AND (
+            args.blocked_rowid IS NULL
+            OR
+            args.blocked_rowid < Edge.rowid
+          )
         ORDER BY
-          Edge.rowid
+          Edge.rowid ASC
         LIMIT 1
       },
       {},
+      $first_must_not_be,
       $match[-1],
       $self->_json->encode(\@match)
     );
 
     last unless defined $next;
+
+#    warn "adding $next to @match";
+
     push @match, $next;
+
+    $first_must_not_be = undef;
   }
 
   my @tuples = $self->_subgraph->{dbh}->selectall_array(q{
@@ -207,7 +265,21 @@ sub _first_planar_path_between {
       Edge
         INNER JOIN json_each(?) each
           ON (Edge.rowid = each.value)
+    ORDER BY 
+      each.key
   }, {}, $self->g->_json->encode(\@match));
+
+#  warn "found tuples" if @tuples;
+
+  # no match found
+  return unless
+    @tuples
+    and
+    $tuples[-1][2] == $self->dst_pos 
+    and
+    $tuples[-1][3] == $self->dst_vertex;
+
+#  warn "found match";
 
   return Grammar::Graph2::TestParser::PlaneMatchEnumerator::Match->new(
     flat_path => [ @match ],
