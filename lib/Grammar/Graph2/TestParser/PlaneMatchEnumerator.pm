@@ -78,6 +78,8 @@ sub BUILD {
 
 #  local $self->_dbh->{sqlite_allow_multiple_statements} = 1;
 
+
+  # FIXME: skippable instead <> self_loop test
   my @foo = $self->g->_dbh->selectall_array(q{
     WITH
     args AS (
@@ -103,10 +105,10 @@ sub BUILD {
       result.dst_pos BETWEEN args.src_pos AND args.dst_pos
       AND
       (result.src_vertex = args.src_vertex
-        OR src_p.self_loop = 'no')
+        OR src_p.skippable)
       AND
       (result.dst_vertex = args.dst_vertex
-        OR dst_p.self_loop = 'no')
+        OR dst_p.skippable)
   }, {}, $self->src_pos, $self->src_vertex, $self->dst_pos, $self->dst_vertex);
 
   my $tmp = Graph::Feather->new(
@@ -127,6 +129,9 @@ sub BUILD {
   # FIXME: unsure about this
   $tmp->feather_delete_edges($tmp->edges_from($self->_dst))
     unless $self->_dst eq $self->_src;
+
+  $tmp->{dbh}->sqlite_backup_to_file('SUBGRAPH.sqlite')
+    if $self->src_pos == 4;
 
   $self->_subgraph($tmp);
 }
@@ -152,12 +157,18 @@ sub _next_match {
 
     my $last_rowid = pop @path;
 
+#warn "last_rowid $last_rowid";
+
+    my @foo = @path ? @path : $self->_first_rowid($last_rowid);
+
+# warn "foo = @foo";
+
     my $match = $self->_next_planar_path_between(
-      $last_rowid, @path);
+      $last_rowid, @foo);
 
     if ($match) {
       my @new_path = @{ $match->flat_path };
-#      warn "found match\n  old: @old_path\n  new: @new_path";
+      warn "found match\n  old: @old_path\n  new: @new_path";
       return $match;
     }
 
@@ -168,13 +179,14 @@ sub _next_match {
 
 sub _first_rowid {
   # TODO: add parameter for "random/ordered"
-  my ($self) = @_;
+  my ($self, $lt) = @_;
 
   my @match = $self->_subgraph->{dbh}->selectrow_array(q{
     WITH
     args AS (
       SELECT
-        CAST(? AS TEXT) AS start
+        CAST(? AS TEXT) AS start,
+        COALESCE(CAST(? AS INT), 0) AS lt
     )
     SELECT
       Edge.rowid
@@ -183,10 +195,12 @@ sub _first_rowid {
         INNER JOIN args
     WHERE
       Edge.src = args.start
+      AND
+      Edge.rowid > args.lt
     ORDER BY
       Edge.rowid ASC
     LIMIT 1
-  }, {}, $self->_src);
+  }, {}, $self->_src, $lt);
 
   return @match;  
 }

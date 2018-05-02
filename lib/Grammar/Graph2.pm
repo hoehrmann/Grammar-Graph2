@@ -64,9 +64,10 @@ sub vp_run_list       { _rw_vertex_attribute('run_list',      @_) }
 sub vp_self_loop      { _rw_vertex_attribute('self_loop',     @_) }
 sub vp_contents_self_loop      { _rw_vertex_attribute('contents_self_loop',     @_) }
 sub vp_topo           { _rw_vertex_attribute('topo',          @_) }
+sub vp_skippable      { _rw_vertex_attribute('skippable',     @_) }
 sub vp_epsilon_group  { _rw_vertex_attribute('epsilon_group', @_) }
 sub vp_shadow_group   { _rw_vertex_attribute('shadow_group',  @_) }
-sub vp_stack_group   { _rw_vertex_attribute('stack_group',  @_) }
+sub vp_stack_group    { _rw_vertex_attribute('stack_group',  @_) }
 
 #####################################################################
 #
@@ -276,6 +277,7 @@ sub from_grammar_graph {
       self_loop DEFAULT 'no',
       contents_self_loop DEFAULT 'no',
       topo INT,
+      skippable,
       epsilon_group,
       shadow_group,
       stack_group REFERENCES Vertex(vertex_name) ON UPDATE CASCADE
@@ -294,6 +296,7 @@ sub from_grammar_graph {
       self_loop,
       contents_self_loop,
       topo,
+      skippable,
       epsilon_group,
       shadow_group,
       stack_group,
@@ -303,30 +306,10 @@ sub from_grammar_graph {
       ) AS INT) AS is_stack,
       CAST(type IN ('Start', 'If', 'If1', 'If2') AS INT) AS is_push,
       CAST(type IN ('Final', 'Fi', 'Fi1', 'Fi2') AS INT) AS is_pop,
-      
-      -- FIXME: does not consider Ifs properly
-      CAST(
-        NOT(self_loop <> 'no' AND type IN (
-          'Start', 'If', 'If1', 'If2',
-          'Final', 'Fi', 'Fi1', 'Fi2'
-        )
-
-/*
-        AND
-        NOT(type IN (
-          'If', 'If1', 'If2',
-          'Fi', 'Fi1', 'Fi2'
-        ))
-*/
-
-/*        
-        AND
-        NOT(type IN (
-          'If', 'If1', 'If2',
-          'Fi', 'Fi1', 'Fi2'
-        ) AND contents_self_loop <> 'no')
-*/
-      ) AS INT) AS is_skippable
+      CAST( type IN (
+        'If', 'If1', 'If2',
+        'Fi', 'Fi1', 'Fi2'
+      ) AS INT) AS is_conditional
     FROM
       vertex_property
     ;

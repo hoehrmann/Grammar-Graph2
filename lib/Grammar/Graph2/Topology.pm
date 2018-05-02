@@ -301,60 +301,6 @@ sub BUILD {
     ;
 
     -----------------------------------------------------------------
-    -- view_next_stack
-    -----------------------------------------------------------------
-
-    DROP VIEW IF EXISTS view_next_stack;
-
-    CREATE VIEW view_next_stack AS
-    WITH RECURSIVE
-    stop_vertex(vertex) AS (
-      SELECT
-        vertex
-      FROM
-        vertex_property
-      WHERE
-        type IN (
-          'If1', 'If2', 'Fi1', 'Fi2',
-          'If', 'Fi', 'Prelude', 'Postlude')
-        OR
-        self_loop <> 'no' -- TODO: 'irregular'?
-        OR
-        vertex IN (SELECT vertex FROM view_start_vertex
-                   UNION
-                   SELECT vertex FROM view_final_vertex)
-    ),
-    successors_and_self(origin, v) AS (
-
-      SELECT vertex AS origin, vertex AS v FROM vertex_property
-
-      UNION
-
-      SELECT
-        r.origin,
-        Edge.dst
-      FROM
-        Edge
-          INNER JOIN successors_and_self AS r
-            ON (Edge.src = r.v)
-          INNER JOIN vertex_property AS src_p
-            ON (Edge.src = src_p.vertex)
-      WHERE
-        src_p.vertex NOT IN (SELECT * FROM stop_vertex)
-    )
-    SELECT
-      origin AS vertex,
-      v AS next_stack
-    FROM
-      successors_and_self
-    WHERE
-      v IN (SELECT * FROM stop_vertex)
-    ORDER BY
-      origin,
-      v
-    ;
-
-    -----------------------------------------------------------------
     -- view_vertices_between_self_and_partner
     -----------------------------------------------------------------
     DROP VIEW IF EXISTS view_vertices_between_self_and_partner;
@@ -444,6 +390,7 @@ sub BUILD {
   $self->_add_self_loop_attributes();
   $self->_add_topological_attributes();
   $self->_add_stack_groups();
+  $self->_add_skippable();
   $self->_dbh->do(q{ ANALYZE });
 }
 
@@ -760,7 +707,143 @@ sub _add_stack_groups {
     for @stack_groups;
 }
 
+sub _add_skippable {
+  my ($self) = @_;
+
+  my @skippable = $self->_dbh->selectall_array(q{
+    WITH 
+    conditionals AS (
+      SELECT
+        if_p.vertex AS 'If',
+        json_array(
+          if_p.vertex, if_p.p1, if_p.p2,
+          fi_p.vertex, fi_p.p1, fi_p.p2) AS six_tuple
+      FROM
+        view_vp_plus if_p
+          INNER JOIN view_vp_plus fi_p
+            ON (if_p.partner = fi_p.vertex
+              AND if_p.type = 'If')
+    ),
+    base AS (
+      SELECT
+        conditionals.If AS root,
+        each.value AS related
+      FROM
+        conditionals
+          INNER JOIN json_each(conditionals.six_tuple) each
+    ),
+    if_property AS (
+      SELECT
+        base.root AS root,
+        MIN(MIN(related_p.self_loop, related_p.contents_self_loop)) AS property
+      FROM
+        base
+          INNER JOIN view_vp_plus related_p
+            ON (base.related = related_p.vertex)
+      GROUP BY 
+        base.root
+    ),
+    result AS (
+      SELECT
+        base.related AS vertex,
+        if_property.property AS property
+      FROM
+        if_property
+          INNER JOIN base
+            ON (if_property.root = base.root)
+      UNION
+      SELECT
+        vertex_p.vertex AS vertex,
+        vertex_p.self_loop
+      FROM
+        view_vp_plus vertex_p
+      WHERE
+        NOT(vertex_p.is_conditional)
+    )
+    SELECT
+      result.vertex,
+      property = 'no' AS skippable
+    FROM
+      result
+        INNER JOIN view_start_vertex
+        INNER JOIN view_final_vertex
+    WHERE
+      result.vertex NOT IN (view_start_vertex.vertex,
+        view_final_vertex.vertex)
+    UNION
+    SELECT
+      vertex,
+      0
+    FROM
+      view_start_vertex
+    UNION
+    SELECT
+      vertex,
+      0
+    FROM
+      view_final_vertex
+  });
+
+  $self->g->vp_skippable(@$_)
+    for @skippable;
+  
+}
+
 1;
 
 __END__
+
+    -----------------------------------------------------------------
+    -- view_next_stack
+    -----------------------------------------------------------------
+
+    DROP VIEW IF EXISTS view_next_stack;
+
+    CREATE VIEW view_next_stack AS
+    WITH RECURSIVE
+    stop_vertex(vertex) AS (
+      SELECT
+        vertex
+      FROM
+        vertex_property
+      WHERE
+        type IN (
+          'If1', 'If2', 'Fi1', 'Fi2',
+          'If', 'Fi', 'Prelude', 'Postlude')
+        OR
+        self_loop <> 'no' -- TODO: 'irregular'?
+        OR
+        vertex IN (SELECT vertex FROM view_start_vertex
+                   UNION
+                   SELECT vertex FROM view_final_vertex)
+    ),
+    successors_and_self(origin, v) AS (
+
+      SELECT vertex AS origin, vertex AS v FROM vertex_property
+
+      UNION
+
+      SELECT
+        r.origin,
+        Edge.dst
+      FROM
+        Edge
+          INNER JOIN successors_and_self AS r
+            ON (Edge.src = r.v)
+          INNER JOIN vertex_property AS src_p
+            ON (Edge.src = src_p.vertex)
+      WHERE
+        src_p.vertex NOT IN (SELECT * FROM stop_vertex)
+    )
+    SELECT
+      origin AS vertex,
+      v AS next_stack
+    FROM
+      successors_and_self
+    WHERE
+      v IN (SELECT * FROM stop_vertex)
+    ORDER BY
+      origin,
+      v
+    ;
 

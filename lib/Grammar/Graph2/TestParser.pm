@@ -183,6 +183,7 @@ sub _update_testparser_all_edges_cleanup {
   my ($self) = @_;
 
   # FIXME: as-is incompatible with hiding non-recs
+  # ^ ?
 
   $self->_dbh->do(q{
     WITH
@@ -214,7 +215,7 @@ sub _update_testparser_all_edges_cleanup {
             ON (dst_p.vertex = testparser_all_edges.dst_vertex)
       WHERE
         (
-          NOT(src_p.is_skippable)
+          NOT(src_p.skippable)
           AND
           NOT EXISTS (
             SELECT 1
@@ -225,7 +226,7 @@ sub _update_testparser_all_edges_cleanup {
         )
         OR
         (
-          NOT(dst_p.is_skippable)
+          NOT(dst_p.skippable)
           AND
           NOT EXISTS (
             SELECT 1
@@ -259,7 +260,7 @@ sub _update_testparser_all_edges_cleanup {
             INNER JOIN view_vp_plus src_p
               ON (src_p.vertex = if1.src_vertex
                 AND src_p.type = 'If'
-                AND src_p.is_skippable
+                AND src_p.skippable
                 AND src_p.name = '#ordered_choice')
             INNER JOIN vertex_property if2_p
               ON (if2.dst_vertex = if2_p.vertex
@@ -285,7 +286,7 @@ sub _update_testparser_all_edges_cleanup {
               ON (if1_p.vertex = if_p.p1
                 AND if_p.name = '#exclusion'
                 AND if_p.type = 'If'
-                AND if_p.is_skippable)
+                AND if_p.skippable)
             INNER JOIN vertex_property if2_p
               ON (if2_p.vertex = if_p.p2)
             INNER JOIN testparser_all_edges e
@@ -903,7 +904,8 @@ sub _create_collapsed_to_stack_vertices {
     FROM
       view_vp_plus vertex_p
     WHERE
-      vertex_p.is_skippable
+--      not(vertex_p.is_stack)
+      vertex_p.skippable
     EXCEPT SELECT vertex FROM view_start_vertex
     EXCEPT SELECT vertex FROM view_final_vertex
   )
