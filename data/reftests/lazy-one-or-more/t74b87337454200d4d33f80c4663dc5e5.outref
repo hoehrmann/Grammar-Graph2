@@ -46,50 +46,20 @@
       [
          1,
          "",
-         1,
-         "S",
+         2,
+         "#ordered_choice",
          5,
-         "S",
+         "#ordered_choice",
          5,
          ""
       ],
       [
-         1,
-         "S",
-         1,
-         "A",
-         5,
-         "A",
-         5,
-         "S"
-      ],
-      [
-         1,
-         "A",
-         2,
-         "#ordered_choice",
-         5,
-         "#ordered_choice",
-         5,
-         "A"
-      ],
-      [
-         2,
-         "B",
-         null,
-         null,
-         null,
-         null,
-         5,
-         "B"
-      ],
-      [
          2,
          null,
-         2,
-         "B",
-         5,
-         "B",
+         null,
+         null,
+         null,
+         null,
          5,
          null
       ],

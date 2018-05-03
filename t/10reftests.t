@@ -69,8 +69,6 @@ eval {
       JSON->new->decode(<$f>);
     };
 
-=pod
-
     is_deeply $got->{parent_child_signature},
       $expected->{parent_child_signature},
       $path_prefix . ' parent_child_signature';
@@ -78,8 +76,6 @@ eval {
     is_deeply $got->{sibling_signature},
       $expected->{sibling_signature},
       $path_prefix . ' sibling_signature';
-
-=cut
 
     is_deeply $got->{all_matches},
       $expected->{all_matches},

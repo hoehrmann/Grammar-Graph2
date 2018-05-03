@@ -130,8 +130,8 @@ sub BUILD {
   $tmp->feather_delete_edges($tmp->edges_from($self->_dst))
     unless $self->_dst eq $self->_src;
 
-  $tmp->{dbh}->sqlite_backup_to_file('SUBGRAPH.sqlite')
-    if $self->src_pos == 4;
+#  $tmp->{dbh}->sqlite_backup_to_file('SUBGRAPH.sqlite')
+#    if $self->src_pos == 4;
 
   $self->_subgraph($tmp);
 }

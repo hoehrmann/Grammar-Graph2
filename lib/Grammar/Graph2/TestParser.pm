@@ -1173,15 +1173,18 @@ sub _create_trees_bottom_up {
 
   }
 
-  warn "REMOVED N ordered_choice EDGES: " . $self->_dbh->do(q{
-    DELETE
-    FROM 
-      t
-    WHERE 
-      t.rowid IN (
+  $self->_cleanup_ordered_choice();
+}
 
+sub _cleanup_ordered_choice {
+  my ($self) = @_;
+
+  my $affected1 = $self->_dbh->do(q{
+    WITH 
+    failed AS (
       SELECT
-        t.rowid
+        t.mid_src_pos AS pos,
+        t.mid_src_vertex AS vertex
       FROM
         t
           INNER JOIN vertex_property src_p
@@ -1203,11 +1206,102 @@ sub _create_trees_bottom_up {
           WHERE inner_t.src_pos = t.src_pos
             AND inner_t.src_vertex = t.src_vertex
             AND inner_t.mid_src_vertex = src_p.p1
---            AND inner_t.dst_pos = t.dst_pos
---            AND inner_t.dst_vertex = t.dst_vertex
         )
-
     )
+    DELETE
+    FROM 
+      testparser_all_edges
+    WHERE 
+      EXISTS (
+        SELECT 1
+        FROM failed 
+        WHERE 
+          testparser_all_edges.src_pos = failed.pos
+          AND
+          testparser_all_edges.src_vertex = failed.vertex
+      )
+  });
+
+  return unless $affected1 > 0;
+
+  $self->_create_without_unreachable_vertices();
+
+  $self->_dbh->do(q{
+    WITH
+    planar_vertices AS (
+      SELECT 
+        rowid AS id,
+        src_pos AS pos,
+        src_vertex AS vertex
+      FROM
+        result
+      UNION
+      SELECT 
+        rowid AS id,
+        dst_pos AS pos,
+        dst_vertex AS vertex
+      FROM
+        result
+    ),
+    t_vertices AS (
+      SELECT
+        rowid AS id,
+        src_pos AS pos,
+        src_vertex AS vertex
+      FROM
+        t
+      UNION
+      SELECT
+        rowid AS id,
+        mid_src_pos AS pos,
+        mid_src_vertex AS vertex
+      FROM
+        t
+      WHERE
+        mid_dst_vertex IS NOT NULL
+      UNION
+      SELECT
+        rowid AS id,
+        mid_dst_pos AS pos,
+        mid_dst_vertex AS vertex
+      FROM
+        t
+      UNION
+      SELECT
+        rowid AS id,
+        dst_pos AS pos,
+        dst_vertex AS vertex
+      FROM
+        t
+    ),
+    t_filtered AS (
+      SELECT
+        *
+      FROM
+        t_vertices
+      WHERE
+        vertex IS NOT NULL
+    )
+    DELETE
+    FROM
+      t
+    WHERE
+      t.rowid IN (
+        SELECT
+          id
+        FROM
+          t_filtered
+        WHERE
+          NOT EXISTS (
+            SELECT 1
+            FROM planar_vertices p
+            WHERE
+              p.pos = t_filtered.pos
+              AND
+              p.vertex = t_filtered.vertex
+          )
+      )
+    
   });
 
 }

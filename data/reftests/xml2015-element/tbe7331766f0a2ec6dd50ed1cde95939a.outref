@@ -118,7 +118,38 @@
          "irregular"
       ]
    ],
-   "parent_child_signature":[],
+   "parent_child_signature":[
+      [
+         1,
+         "",
+         4,
+         "content",
+         11,
+         "content",
+         15,
+         ""
+      ],
+      [
+         4,
+         "content",
+         null,
+         null,
+         null,
+         null,
+         11,
+         "content"
+      ],
+      [
+         4,
+         "content",
+         null,
+         null,
+         null,
+         null,
+         11,
+         "content"
+      ]
+   ],
    "random_matches":[],
    "sibling_signature":[]
 }

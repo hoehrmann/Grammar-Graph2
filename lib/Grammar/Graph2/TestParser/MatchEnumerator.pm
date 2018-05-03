@@ -117,6 +117,9 @@ sub _first_match_from_tree_match {
     # in the result afterwards, it is possible that a tree match is
     # invalid, in which case matches in the plane will be absent 
     # and then we end up here. We then try with the next tree match.
+
+    return; # Note above ^ should be obsolete now
+    
     return $self->_first_match_from_tree_match($tree_enum,
       $tree_enum->_next_match($tree_match));
   }
