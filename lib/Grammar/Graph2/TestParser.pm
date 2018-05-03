@@ -1172,8 +1172,58 @@ sub _create_trees_bottom_up {
   #  last if $result == 0;
 
   }
+
+  warn "REMOVED N ordered_choice EDGES: " . $self->_dbh->do(q{
+    DELETE
+    FROM 
+      t
+    WHERE 
+      t.rowid IN (
+
+      SELECT
+        t.rowid
+      FROM
+        t
+          INNER JOIN vertex_property src_p
+            ON (src_p.vertex = t.src_vertex)
+          INNER JOIN vertex_property mid_src_p
+            ON (mid_src_p.vertex = t.mid_src_vertex)
+      WHERE
+        src_p.type = 'If'
+        AND
+        src_p.name = '#ordered_choice'
+        AND
+        mid_src_p.vertex = src_p.p2
+        AND
+        t.dst_vertex = src_p.partner
+        AND
+        EXISTS (
+          SELECT 1
+          FROM t inner_t
+          WHERE inner_t.src_pos = t.src_pos
+            AND inner_t.src_vertex = t.src_vertex
+            AND inner_t.mid_src_vertex = src_p.p1
+--            AND inner_t.dst_pos = t.dst_pos
+--            AND inner_t.dst_vertex = t.dst_vertex
+        )
+
+    )
+  });
+
 }
 
 1;
 
 __END__
+
+
+delete from t
+where src_vertex type is if and name is ordered_choice
+  and mid_src_vertex is if2
+where 
+  exists 
+
+
+
+sqlite> select t.rowid, t.*, src_p.topo, mid_src_p.topo, mid_dst_p.topo, dst_p.topo from t inner join vertex_property src_p on (src_p.vertex = t.src_vertex) inner join vertex_property dst_p on (dst_p.vertex = t.dst_vertex) left join vertex_property mid_src_p on (mid_src_p.vertex = t.mid_src_vertex) left join vertex_property mid_dst_p on (mid_dst_p.vertex = t.mid_dst_vertex);
+

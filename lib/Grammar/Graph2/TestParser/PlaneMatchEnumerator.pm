@@ -118,7 +118,7 @@ sub BUILD {
   my @between = graph_vertices_between($tmp, $self->_src, $self->_dst);
 
   if (not @between) {
-    warn "No vertices between src and dst";
+#    warn "No vertices between src and dst";
   }
 
   # TODO(bh): check that `graph_vertices_between` returns
