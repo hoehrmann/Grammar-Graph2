@@ -203,8 +203,8 @@ sub create_t_cxx {
 sub create_t {
   my ($self) = @_;
 
-  $self->create_t_perlsql();
-#  $self->create_t_cxx();
+#  $self->create_t_perlsql();
+  $self->create_t_cxx();
 
   $self->_dbh->do(q{ ANALYZE });
 

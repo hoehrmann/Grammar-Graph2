@@ -44,21 +44,21 @@
       [
          3,
          "A",
-         3,
-         "A",
+         null,
+         null,
+         null,
+         null,
          4,
-         "A",
-         5,
          "A"
       ],
       [
          3,
          "A",
-         null,
-         null,
-         null,
-         null,
+         3,
+         "A",
          4,
+         "A",
+         5,
          "A"
       ]
    ],

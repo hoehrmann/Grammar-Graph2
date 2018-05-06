@@ -66,7 +66,7 @@ sub parse_to_ref_data {
 
   return {
     parent_child_signature => $p->_dbh->selectall_arrayref(q{
-      SELECT 
+      SELECT DISTINCT
         parent_start_pos,
         parent_start_name,
         first_child_pos,
@@ -77,15 +77,19 @@ sub parse_to_ref_data {
         parent_final_name
       FROM
         view_parent_child_signature
+      ORDER BY 
+        1, 2, 3, 4, 5, 6, 7, 8
     }),
     sibling_signature => $p->_dbh->selectall_arrayref(q{
-      SELECT 
+      SELECT DISTINCT 
         lhs_final_pos,
         lhs_final_name,
         rhs_start_pos,
         rhs_start_name
       FROM
         view_sibling_signature
+      ORDER BY
+        1, 2, 3, 4
     }),
     random_matches => [
       sort_by {

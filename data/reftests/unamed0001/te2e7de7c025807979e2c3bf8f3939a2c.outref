@@ -48,21 +48,21 @@
       [
          4,
          "A",
-         4,
-         "A",
+         null,
+         null,
+         null,
+         null,
          5,
-         "A",
-         6,
          "A"
       ],
       [
          4,
          "A",
-         null,
-         null,
-         null,
-         null,
+         4,
+         "A",
          5,
+         "A",
+         6,
          "A"
       ]
    ],

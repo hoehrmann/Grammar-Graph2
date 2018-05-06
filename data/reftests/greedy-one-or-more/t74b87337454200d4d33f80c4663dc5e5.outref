@@ -55,6 +55,16 @@
       ],
       [
          2,
+         null,
+         3,
+         "#ordered_choice",
+         5,
+         "#ordered_choice",
+         5,
+         null
+      ],
+      [
+         2,
          "#ordered_choice",
          2,
          null,
@@ -64,9 +74,9 @@
          "#ordered_choice"
       ],
       [
-         2,
-         null,
          3,
+         null,
+         4,
          "#ordered_choice",
          5,
          "#ordered_choice",
@@ -84,9 +94,9 @@
          "#ordered_choice"
       ],
       [
-         3,
-         null,
          4,
+         null,
+         5,
          "#ordered_choice",
          5,
          "#ordered_choice",
@@ -102,16 +112,6 @@
          null,
          5,
          "#ordered_choice"
-      ],
-      [
-         4,
-         null,
-         5,
-         "#ordered_choice",
-         5,
-         "#ordered_choice",
-         5,
-         null
       ],
       [
          5,

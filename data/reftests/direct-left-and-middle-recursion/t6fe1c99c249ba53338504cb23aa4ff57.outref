@@ -64,21 +64,21 @@
       [
          6,
          "A",
-         6,
-         "A",
+         null,
+         null,
+         null,
+         null,
          7,
-         "A",
-         8,
          "A"
       ],
       [
          6,
          "A",
-         null,
-         null,
-         null,
-         null,
+         6,
+         "A",
          7,
+         "A",
+         8,
          "A"
       ]
    ],
