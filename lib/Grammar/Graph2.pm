@@ -314,6 +314,14 @@ sub from_grammar_graph {
       vertex_property
     ;
 
+    DROP TABLE IF EXISTS m_view_vp_plus;
+    CREATE TABLE  m_view_vp_plus AS
+    SELECT * FROM view_vp_plus LIMIT 0;
+    CREATE UNIQUE INDEX idx_m_view_vp_plus_vertex
+      ON m_view_vp_plus(vertex);
+    CREATE INDEX idx_m_view_vp_plus_is_stack
+      ON m_view_vp_plus(is_stack);
+
     CREATE TABLE vertex_shadows(
       vertex REFERENCES Vertex(vertex_name)
         ON UPDATE CASCADE ON DELETE CASCADE,

@@ -91,6 +91,19 @@ sub create_t_perlsql {
   $self->_update_shadowed_testparser_all_edges();
 
   $self->_create_without_unreachable_vertices();
+
+  $self->_log->debugf("removed unreachable edges: %s",
+    $self->g->_json->encode($self->_dbh->selectall_arrayref(q{
+      SELECT * FROM testparser_all_edges
+      EXCEPT
+      SELECT * FROM result
+    })));
+
+#=cut
+
+  $self->_dbh->do(q{ ANALYZE });
+
+  $self->_create_collapsed_to_stack_vertices();
 }
 
 sub create_t_cxx {
@@ -121,7 +134,8 @@ sub create_t_cxx {
       json_extract(each.value, '$[2]') AS dst_pos,
       CAST(json_extract(each.value, '$[3]') AS TEXT) AS dst_vertex
     FROM
-      json_each(?) each
+      json_each(json_extract(?, '$[0]')) each
+/*
     UNION
     SELECT
       1,
@@ -132,6 +146,7 @@ sub create_t_cxx {
       view_start_vertex
         INNER JOIN old_edge
           ON (old_edge.src = view_start_vertex.vertex)
+*/
     ;
     CREATE TABLE testparser_all_edges AS
     SELECT * FROM result;
@@ -139,8 +154,50 @@ sub create_t_cxx {
     SELECT * FROM result;
   }, {}, $json);
 
-}
+  $self->_create_t_empty();
 
+  $self->_dbh->do(q{
+    INSERT OR IGNORE INTO t
+    SELECT
+      json_extract(each.value, '$[0]') AS src_pos,
+      CAST(json_extract(each.value, '$[1]') AS TEXT) AS src_vertex,
+      NULL AS mid_src_pos,
+      NULL AS mid_src_vertex,
+      NULL AS mid_dst_pos,
+      NULL AS mid_dst_vertex,
+      json_extract(each.value, '$[2]') AS dst_pos,
+      CAST(json_extract(each.value, '$[3]') AS TEXT) AS dst_vertex
+    FROM
+      json_each(json_extract(?, '$[1]')) each
+    /* TODO: missing WHERE clause to prevent false start -> final_but_not_partner edges */
+  }, {}, $json);
+
+  $self->_dbh->do(q{
+    WITH
+    bad AS (
+      SELECT
+        t.rowid
+      FROM
+        t 
+          INNER JOIN view_vp_plus src_p
+            ON (src_p.vertex = t.src_vertex)
+          INNER JOIN view_vp_plus dst_p
+            ON (dst_p.vertex = t.dst_vertex)
+      WHERE
+        src_p.is_push
+        AND
+        dst_p.is_pop
+        AND
+        src_p.partner <> dst_p.vertex
+    )
+    DELETE
+    FROM 
+      t
+    WHERE
+      t.rowid IN (SELECT * FROM bad)
+  });
+
+}
 
 # TODO: rename to compute_t or whatever
 sub create_t {
@@ -148,19 +205,6 @@ sub create_t {
 
   $self->create_t_perlsql();
 #  $self->create_t_cxx();
-
-  $self->_log->debugf("removed unreachable edges: %s",
-    $self->g->_json->encode($self->_dbh->selectall_arrayref(q{
-      SELECT * FROM testparser_all_edges
-      EXCEPT
-      SELECT * FROM result
-    })));
-
-#=cut
-
-  $self->_dbh->do(q{ ANALYZE });
-
-  $self->_create_collapsed_to_stack_vertices();
 
   $self->_dbh->do(q{ ANALYZE });
 
@@ -858,7 +902,7 @@ sub _create_without_unreachable_vertices {
 
 }
 
-sub _create_collapsed_to_stack_vertices {
+sub _create_t_empty {
   my ($self) = @_;
 
   $self->_dbh->do(q{
@@ -893,6 +937,13 @@ sub _create_collapsed_to_stack_vertices {
   $self->_dbh->do(q{
     CREATE INDEX idx_t_src ON t(src_pos, src_vertex)
   });
+
+}
+
+sub _create_collapsed_to_stack_vertices {
+  my ($self) = @_;
+
+  $self->_create_t_empty();
 
   # FIXME: convert to view
 
@@ -1122,6 +1173,13 @@ sub _create_trees_bottom_up {
         t.rowid > ?
     }, {}, $max_rowid);
 
+    if (not defined $new_min_distance) {
+      # @@@
+      $new_min_distance = $min_distance + 1;
+    }
+
+=pod
+
     my @debug = $self->_dbh->selectall_array(q{
       SELECT
         *, dst_pos - src_pos
@@ -1132,11 +1190,6 @@ sub _create_trees_bottom_up {
     }, {}, $max_rowid);
 
 #    say join "\t", "min_distance", $min_distance, "max_rowid", $max_rowid, map { $_ // '' } @$_ for @debug;
-
-    if (not defined $new_min_distance) {
-      # @@@
-      $new_min_distance = $min_distance + 1;
-    }
 
     if (not defined $new_min_distance) {
       ($new_min_distance) = $self->_dbh->selectrow_array(q{
@@ -1158,6 +1211,8 @@ sub _create_trees_bottom_up {
       $new_min_distance =
         max($min_distance + 1, $self->_input_length + 1)
     }
+
+=cut
 
     my $old_min_distance = $min_distance;
 

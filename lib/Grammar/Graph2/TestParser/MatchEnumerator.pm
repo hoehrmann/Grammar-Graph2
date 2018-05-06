@@ -119,7 +119,7 @@ sub _first_match_from_tree_match {
     # and then we end up here. We then try with the next tree match.
 
     return; # Note above ^ should be obsolete now
-    
+
     return $self->_first_match_from_tree_match($tree_enum,
       $tree_enum->_next_match($tree_match));
   }
@@ -164,11 +164,11 @@ sub _next_match {
 
       # cannot increment plane matches, so increment tree match
 
-      warn "#### tree next";
+#      warn "#### tree next";
       $tree_match = $prev_match->tree_enumerator->_next_match(
         $prev_match->tree_match
       );
-      warn "### FOUND";
+#      warn "### FOUND";
 
       return unless $tree_match;
 
