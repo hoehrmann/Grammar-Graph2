@@ -104,6 +104,8 @@ sub create_t_perlsql {
   $self->_dbh->do(q{ ANALYZE });
 
   $self->_create_collapsed_to_stack_vertices();
+
+  $self->_create_trees_bottom_up();
 }
 
 sub create_t_cxx {
@@ -157,21 +159,37 @@ sub create_t_cxx {
   $self->_create_t_empty();
 
   $self->_dbh->do(q{
+    WITH base AS (
+      SELECT
+        json_extract(each.value, '$[0]') AS src_pos,
+        CAST(json_extract(each.value, '$[1]') AS TEXT) AS src_vertex,
+
+        json_extract(each.value, '$[2]') AS mid_src_pos,
+        CAST(json_extract(each.value, '$[3]') AS TEXT) AS mid_src_vertex,
+        json_extract(each.value, '$[4]') AS mid_dst_pos,
+        CAST(json_extract(each.value, '$[5]') AS TEXT) AS mid_dst_vertex,
+
+        json_extract(each.value, '$[6]') AS dst_pos,
+        CAST(json_extract(each.value, '$[7]') AS TEXT) AS dst_vertex
+      FROM
+        json_each(json_extract(?, '$[1]')) each
+      /* TODO: missing WHERE clause to prevent false start -> final_but_not_partner edges */
+    )
     INSERT OR IGNORE INTO t
     SELECT
-      json_extract(each.value, '$[0]') AS src_pos,
-      CAST(json_extract(each.value, '$[1]') AS TEXT) AS src_vertex,
-      NULL AS mid_src_pos,
-      NULL AS mid_src_vertex,
-      NULL AS mid_dst_pos,
-      NULL AS mid_dst_vertex,
-      json_extract(each.value, '$[2]') AS dst_pos,
-      CAST(json_extract(each.value, '$[3]') AS TEXT) AS dst_vertex
+      src_pos,
+      src_vertex,
+      NULLIF(mid_src_pos, 0),
+      NULLIF(mid_src_vertex, '0'),
+      NULLIF(mid_dst_pos, 0),
+      NULLIF(mid_dst_vertex, '0'),
+      dst_pos,
+      dst_vertex
     FROM
-      json_each(json_extract(?, '$[1]')) each
-    /* TODO: missing WHERE clause to prevent false start -> final_but_not_partner edges */
+      base
   }, {}, $json);
 
+  # FIXME: redundant now?
   $self->_dbh->do(q{
     WITH
     bad AS (
@@ -189,6 +207,8 @@ sub create_t_cxx {
         dst_p.is_pop
         AND
         src_p.partner <> dst_p.vertex
+        AND
+        mid_src_pos IS NULL
     )
     DELETE
     FROM 
@@ -206,9 +226,12 @@ sub create_t {
 #  $self->create_t_perlsql();
   $self->create_t_cxx();
 
+  warn "done with cxx";
+  $self->_dbh->sqlite_backup_to_file('WONDER.sqlite');
+
   $self->_dbh->do(q{ ANALYZE });
 
-  $self->_create_trees_bottom_up();
+  $self->_cleanup_ordered_choice();
 
   $self->_dbh->do(q{
     DELETE FROM t
@@ -410,6 +433,8 @@ sub _file_to_bytes_table {
     ;
   }, {}, $self->g->_json->encode(\@data));
 
+  return;
+
   die if $self->_dbh->selectrow_array(q{
 
     WITH RECURSIVE
@@ -485,17 +510,29 @@ sub _file_to_table {
     )
   });
 
+  my @ords = _file_to_ords($self->input_path);
+  $self->_input_length( scalar @ords );
+
+#  warn "input insert";
+  $self->_dbh->do(q{
+    INSERT INTO testparser_input(ord)
+    SELECT each.value
+    FROM json_each(?) each
+  }, {}, $self->g->_json->encode(\@ords));
+#  warn "input insert done";
+
+#  $self->_file_to_bytes_table();
+
+  return;
+
   my $sth = $self->_dbh->prepare(q{
     INSERT INTO testparser_input(ord) VALUES (?)
   });
 
-  my @ords = _file_to_ords($self->input_path);
 
   $self->_dbh->begin_work();
   $sth->execute($_) for @ords;
   $self->_dbh->commit();
-
-  $self->_input_length( scalar @ords );
 
   $self->_file_to_bytes_table();
 }
@@ -1023,6 +1060,12 @@ sub _create_collapsed_to_stack_vertices {
         AND src_p.partner <> dst_p.vertex)
     )
   });
+
+  $self->_dbh->do(q{
+    UPDATE t
+    SET mid_src_pos = NULL, mid_src_vertex = NULL
+    WHERE mid_dst_pos IS NULL
+  });
   
 }
 
@@ -1159,7 +1202,7 @@ sub _create_trees_bottom_up {
 
     }, {}, ($min_distance) x 4);
 
-#warn join "\t", "min_distance", $min_distance;
+# warn join "\t", "min_distance", $min_distance, "time", time;
 
     # A Rule like "A but not B" requires proving that there is no
     # match for "B" for the rule as a whole to match. TODO: finish
@@ -1220,6 +1263,12 @@ sub _create_trees_bottom_up {
 
     $max_rowid = $prev_max_rowid;
 
+    my ($new_max_rowid) = $self->_dbh->selectrow_array(q{
+      SELECT MAX(rowid) FROM t
+    });
+
+    warn join "\t", "prev_max_rowid", $prev_max_rowid, "new_max_rowid", $new_max_rowid, "\n";
+
 #    say "max_rowid $max_rowid result $result old_min_distance $old_min_distance new_min_distance $new_min_distance";
 
     last if $min_distance > $self->_input_length + 1;
@@ -1228,7 +1277,6 @@ sub _create_trees_bottom_up {
 
   }
 
-  $self->_cleanup_ordered_choice();
 }
 
 sub _cleanup_ordered_choice {
