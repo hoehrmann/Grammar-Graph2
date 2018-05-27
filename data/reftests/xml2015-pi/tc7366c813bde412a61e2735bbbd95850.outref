@@ -106,6 +106,14 @@
          12
       ]
    ],
+   "all_tree_matches":[
+      [
+         "",
+         [],
+         1,
+         12
+      ]
+   ],
    "grammar_self_loops":[
       [
          "BaseChar",

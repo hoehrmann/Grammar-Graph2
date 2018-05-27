@@ -115,6 +115,17 @@ sub parse_to_ref_data {
         defined
       } @all_matches
     ],
+    all_tree_matches => [
+      sort_by {
+        Storable::freeze(\$_)
+      } uniq_by {
+        Storable::freeze(\$_)
+      } map {
+        $_->tree_match_to_tree()
+      } grep {
+        defined
+      } @all_matches
+    ],
     grammar_self_loops => $p->_dbh->selectall_arrayref(q{
       SELECT 
         name,

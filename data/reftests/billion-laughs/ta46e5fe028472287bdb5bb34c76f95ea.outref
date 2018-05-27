@@ -424,6 +424,14 @@
          33
       ]
    ],
+   "all_tree_matches":[
+      [
+         "",
+         [],
+         1,
+         33
+      ]
+   ],
    "grammar_self_loops":[
       [
          "A",

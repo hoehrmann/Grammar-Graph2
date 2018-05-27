@@ -211,6 +211,18 @@ sub random_match {
 #  )->random_match;
 }
 
+sub tree_match_to_json {
+  my ($self, $tree_match) = @_;
+
+  return Grammar::Graph2::TestParser::MatchEnumerator::Match->new(
+    g => $self->g,
+    tree_enumerator => undef,
+    tree_match => $tree_match,
+    plane_enumerators => [ ],
+    plane_matches => [ ],
+  )->to_json_tree;
+}
+
 1;
 
 __END__

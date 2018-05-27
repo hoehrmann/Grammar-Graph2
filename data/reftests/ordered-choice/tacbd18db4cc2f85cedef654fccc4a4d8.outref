@@ -21,6 +21,14 @@
          4
       ]
    ],
+   "all_tree_matches":[
+      [
+         "",
+         [],
+         1,
+         4
+      ]
+   ],
    "grammar_self_loops":[
       [
          "A",

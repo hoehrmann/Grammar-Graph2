@@ -113,11 +113,9 @@ sub create_t_cxx {
 
   $self->_file_to_table();
 
-  $self->_dbh->sqlite_backup_to_file('/home/bjoern/parselov/cxx.sqlite');
-  `cd /home/bjoern/parselov ; perl /home/bjoern/parselov/alx.pl cxx.sqlite > /home/bjoern/parselov/alx/grammar.c`;
   my $path = $self->input_path;
 #  warn "cxx $path";
-  `cd /home/bjoern/parselov/alx/ ; make ; /home/bjoern/parselov/alx/alx $path > /home/bjoern/parselov/cxx.json`;
+  `/home/bjoern/parselov/alx/alx $path > /home/bjoern/parselov/cxx.json`;
   open my $fh, '<', '/home/bjoern/parselov/cxx.json';
   my $json = do { local $/; <$fh>; };
 
@@ -379,6 +377,21 @@ sub create_match_enumerator {
 
   # FIXME: dbh passing, g
   return Grammar::Graph2::TestParser::MatchEnumerator->new(
+    _dbh => $self->_dbh,
+    g => $self->g,
+
+    src_pos => 1,
+    src_vertex => $self->g->gp_start_vertex(),
+    dst_pos => $self->_input_length + 1,
+    dst_vertex => $self->g->gp_final_vertex(),
+  );
+}
+
+sub create_tree_match_enumerator {
+  my ($self) = @_;
+
+  # FIXME: dbh passing, g
+  return Grammar::Graph2::TestParser::TreeMatchEnumerator->new(
     _dbh => $self->_dbh,
     g => $self->g,
 

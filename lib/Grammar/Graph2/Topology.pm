@@ -385,12 +385,48 @@ sub BUILD {
       vertex
     ;
 
+    -----------------------------------------------------------------
+    -- view_without_skippables
+    -----------------------------------------------------------------
+    DROP VIEW IF EXISTS view_without_skippables;
+    CREATE VIEW view_without_skippables AS 
+    WITH RECURSIVE
+    foo AS (
+      SELECT * FROM edge
+      UNION
+      SELECT
+        foo.src AS src,
+        edge.dst AS dst
+      FROM
+        foo
+          INNER JOIN edge
+            ON (foo.dst = edge.src)
+          INNER JOIN view_vp_plus mid_p
+            ON (mid_p.vertex = foo.dst
+              AND mid_p.skippable
+              AND mid_p.type <> 'Input')
+    )
+    SELECT
+      foo.*
+    FROM
+      foo
+        INNER JOIN view_vp_plus src_p
+          ON (src_p.vertex = foo.src)
+        INNER JOIN view_vp_plus dst_p
+          ON (dst_p.vertex = foo.dst)
+    WHERE
+      (src_p.type = 'Input' OR NOT(src_p.skippable))
+      AND
+      (dst_p.type = 'Input' OR NOT(dst_p.skippable))
+    ;
+
   });
 
   $self->_add_self_loop_attributes();
   $self->_add_topological_attributes();
   $self->_add_stack_groups();
   $self->_add_skippable();
+  $self->_add_representative();
   $self->_dbh->do(q{ ANALYZE });
 }
 
@@ -582,6 +618,40 @@ sub _add_topological_attributes {
     );
   }
 
+  my $helper = sub {
+    my ($v) = @_;
+    my @pred = $self->g->g->predecessors($v);
+    my @succ = $self->g->g->successors($v);
+
+    # TODO: simplify this code
+
+    if ($self->g->is_if1_vertex($v)) {
+      die unless @pred == 1;
+      die unless $self->g->is_if_vertex(@pred);
+      return $self->g->vp_name(@pred) eq '#ordered_choice';
+    }
+
+    if ($self->g->is_if2_vertex($v)) {
+      die unless @pred == 1;
+      die unless $self->g->is_if_vertex(@pred);
+      return $self->g->vp_name(@pred) eq '#exclusion';
+    }
+
+    if ($self->g->is_fi1_vertex($v)) {
+      die unless @succ == 1;
+      die unless $self->g->is_fi_vertex(@succ);
+      return $self->g->vp_name(@succ) eq '#ordered_choice';
+    }
+
+    if ($self->g->is_fi2_vertex($v)) {
+      die unless @succ == 1;
+      die unless $self->g->is_fi_vertex(@succ);
+      return $self->g->vp_name(@succ) eq '#exclusion';
+    }
+
+    return 0;
+  };
+
   my @order = order_by_desc {
     $t1->{$_}{max_depth} // warn
   } then_by_desc {
@@ -590,13 +660,16 @@ sub _add_topological_attributes {
     $t1->{$_}{min_depth} // warn
   } then_by_desc {
     $t2->{$_}{min_depth} // warn
+  } then_by_desc {
+    0 + $helper->($_)
   } $self->g->g->vertices();
 
   my @stacks = stack_by {
     join ',', $t1->{$_}{max_depth},
               $t1->{$_}{min_depth},
               $t2->{$_}{max_depth},
-              $t2->{$_}{min_depth}
+              $t2->{$_}{min_depth},
+              0 + $helper->($_)
   } @order;
 
   while (@stacks) {
@@ -787,6 +860,51 @@ sub _add_skippable {
   $self->g->vp_skippable(@$_)
     for @skippable;
   
+}
+
+sub _add_representative {
+  my ($self) = @_;
+
+  my $f = Graph::Feather->new(
+    edges => [ $self->_dbh->selectall_array('
+      SELECT * FROM view_without_skippables
+    ') ]
+  );
+
+  my $p = Acme::Partitioner->using($f->vertices);
+
+  my $partitioner =
+    $p->once_by(sub {
+        my ($skip) = $self->g->vp_skippable($_);
+        return $skip ? '' : $_
+      })
+      ->then_by(sub {
+        my $v = $_;
+
+        my ($skip) = $self->g->vp_skippable($_);
+        return '.' unless $skip;
+
+        my @foo = sort { $a cmp $b } uniq
+          map { $p->partition_of($_) } $f->predecessors($v); # add $v?
+
+        return join ' ', @foo;
+      })
+      ;
+
+  while ($partitioner->refine) {
+    $self->_log->debugf("representative p size = %u", $p->size());
+  }
+
+  my $map_function = sub {
+    my ($v) = @_;
+    return unless $f->has_vertex($v);
+    return [sort $p->items_in( $p->partition_of($v) )]->[0]
+  };
+  
+  for my $v ($self->g->g->vertices) {
+    $self->g->vp_representative($v, $map_function->($v) // $v);
+  }
+
 }
 
 1;

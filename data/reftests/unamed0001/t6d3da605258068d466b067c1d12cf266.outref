@@ -1,5 +1,6 @@
 {
    "all_matches":[],
+   "all_tree_matches":[],
    "grammar_self_loops":[
       [
          "A",
@@ -244,12 +245,12 @@
                                              9
                                           ]
                                        ],
-                                       6,
-                                       9
+                                       7,
+                                       10
                                     ]
                                  ],
-                                 5,
-                                 9
+                                 6,
+                                 10
                               ]
                            ],
                            5,

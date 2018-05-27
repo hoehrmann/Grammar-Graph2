@@ -27,6 +27,14 @@
          7
       ]
    ],
+   "all_tree_matches":[
+      [
+         "",
+         [],
+         1,
+         7
+      ]
+   ],
    "grammar_self_loops":[
       [
          "A",

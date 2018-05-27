@@ -55,6 +55,8 @@ sub BUILD {
   $self->_set_options( $options );
 
   $self->_load_grammar_file();
+
+  $self->_compile_code();
 }
 
 sub basename {
@@ -86,6 +88,15 @@ sub _options_path {
     File::Spec->catfile(
       $self->base_path, 'options.yaml')
   );
+}
+
+sub _compile_code {
+  my ($self) = @_;
+
+  $self->g->_dbh->sqlite_backup_to_file('/home/bjoern/parselov/cxx.sqlite');
+  `cd /home/bjoern/parselov ; perl /home/bjoern/parselov/alx.pl cxx.sqlite > /home/bjoern/parselov/alx/grammar.c`;
+  `cd /home/bjoern/parselov/alx/ ; make`;
+
 }
 
 sub _load_grammar_file {

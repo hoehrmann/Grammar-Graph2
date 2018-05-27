@@ -54,9 +54,9 @@ has '_json' => (
 sub flat_path { [] }
 
 sub _build_tree_from_vertex_list {
-  my ($self, $list, %o) = @_;
+  my ($g, $list, %o) = @_;
 
-  my @augmented = $self->g->_dbh->selectall_array(q{
+  my @augmented = $g->_dbh->selectall_array(q{
     WITH
     base AS (
       SELECT
@@ -78,7 +78,7 @@ sub _build_tree_from_vertex_list {
           ON (vertex_p.vertex = base.vertex)
     ORDER BY
       base.sort_key
-  }, {}, $self->_json->encode($list));
+  }, {}, $g->_json->encode($list));
 
   my $result = [];
   my @stack = ($result);
@@ -108,7 +108,7 @@ sub _build_tree {
   my ($self, $todo, %o) = @_;
   my @list = $self->to_list;
 
-  return $self->_build_tree_from_vertex_list(\@list, %o);
+  return _build_tree_from_vertex_list($self->g, \@list, %o);
 }
 
 sub to_list {
@@ -175,6 +175,28 @@ sub to_json_tree {
   my ($self, %o) = @_;
 
   my $node = $self->to_tree(%o);
+
+  my $result = _to_json_tree($node, 0);
+
+  $result =~ s/,$//;
+
+  return $result;
+}
+
+sub tree_match_to_tree {
+  my ($self, %o) = @_;
+
+  my $node = _build_tree_from_vertex_list(
+    $self->g, [ $self->tree_match->to_list ]);
+
+  return $node;
+}
+
+sub tree_match_to_json_tree {
+  my ($self, %o) = @_;
+
+  my $node = _build_tree_from_vertex_list(
+    $self->g, [ $self->tree_match->to_list ]);
 
   my $result = _to_json_tree($node, 0);
 

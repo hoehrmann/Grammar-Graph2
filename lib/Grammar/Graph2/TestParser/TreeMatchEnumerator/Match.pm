@@ -79,7 +79,6 @@ sub to_list {
   return $self->_build_list([ @{ $self->flat_path } ]);
 }
 
-
 1;
 
 __END__
