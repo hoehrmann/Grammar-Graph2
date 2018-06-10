@@ -271,9 +271,9 @@ sub from_grammar_graph {
           ON UPDATE CASCADE ON DELETE CASCADE,
       type NOT NULL DEFAULT 'empty',
       name,
-      p1 REFERENCES Vertex(vertex_name) ON UPDATE CASCADE,
-      p2 REFERENCES Vertex(vertex_name) ON UPDATE CASCADE,
-      partner REFERENCES Vertex(vertex_name) ON UPDATE CASCADE,
+      p1 REFERENCES Vertex(vertex_name) ON UPDATE CASCADE ON DELETE CASCADE,
+      p2 REFERENCES Vertex(vertex_name) ON UPDATE CASCADE ON DELETE CASCADE,
+      partner REFERENCES Vertex(vertex_name) ON UPDATE CASCADE ON DELETE CASCADE,
       run_list,
       self_loop DEFAULT 'no',
       contents_self_loop DEFAULT 'no',
@@ -281,8 +281,8 @@ sub from_grammar_graph {
       skippable,
       epsilon_group,
       shadow_group,
-      stack_group REFERENCES Vertex(vertex_name) ON UPDATE CASCADE,
-      representative REFERENCES Vertex(vertex_name) ON UPDATE CASCADE
+      stack_group REFERENCES Vertex(vertex_name) ON UPDATE CASCADE ON DELETE CASCADE,
+      representative REFERENCES Vertex(vertex_name) ON UPDATE CASCADE ON DELETE CASCADE
     );
 
     DROP VIEW IF EXISTS view_vp_plus;

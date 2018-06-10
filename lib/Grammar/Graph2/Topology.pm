@@ -7,7 +7,7 @@ use Grammar::Graph2;
 use Log::Any qw//;
 use Types::Standard qw/:all/;
 use File::Spec qw//;
-use List::UtilsBy qw/partition_by sort_by uniq_by/;
+use List::UtilsBy qw/partition_by sort_by uniq_by nsort_by/;
 use Set::IntSpan;
 use Set::IntSpan::Partition;
 use List::Util qw/uniq/;
@@ -898,7 +898,7 @@ sub _add_representative {
   my $map_function = sub {
     my ($v) = @_;
     return unless $f->has_vertex($v);
-    return [sort $p->items_in( $p->partition_of($v) )]->[0]
+    return [nsort_by { $self->g->vp_topo($_) } $p->items_in( $p->partition_of($v) )]->[0]
   };
   
   for my $v ($self->g->g->vertices) {

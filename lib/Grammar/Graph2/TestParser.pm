@@ -8,6 +8,7 @@ use Types::Standard qw/:all/;
 use List::Util qw/min max/;
 use List::OrderBy;
 use List::StackBy;
+use CBOR::XS qw//;
 
 use Graph::Feather;
 use Graph::Directed;
@@ -115,9 +116,13 @@ sub create_t_cxx {
 
   my $path = $self->input_path;
 #  warn "cxx $path";
-  `/home/bjoern/parselov/alx/alx $path > /home/bjoern/parselov/cxx.json`;
-  open my $fh, '<', '/home/bjoern/parselov/cxx.json';
-  my $json = do { local $/; <$fh>; };
+  `/home/bjoern/parselov/alx/alx $path > /home/bjoern/parselov/cxx.cbor`;
+  open my $fh, '<', '/home/bjoern/parselov/cxx.cbor';
+  my $cbor = do { local $/; <$fh>; };
+
+  my $json = JSON->new->encode(
+    CBOR::XS->new->decode($cbor)
+  );
 
   local $self->_dbh->{sqlite_allow_multiple_statements} = 1;
   $self->_dbh->do(q{
