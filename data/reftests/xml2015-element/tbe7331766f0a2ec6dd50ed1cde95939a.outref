@@ -123,12 +123,22 @@
       [
          1,
          "",
+         1,
+         "element",
+         15,
+         "element",
+         15,
+         ""
+      ],
+      [
+         1,
+         "element",
          4,
          "content",
          11,
          "content",
          15,
-         ""
+         "element"
       ],
       [
          4,

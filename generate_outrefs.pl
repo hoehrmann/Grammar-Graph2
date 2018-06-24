@@ -33,8 +33,8 @@ use Grammar::Graph2::TestCase;
 
 local $Storable::canonical = 1;
 
-my @dirs = <./data/reftests/alxbug>;
-# my @dirs = <./data/reftests/*>;
+# my @dirs = <./data/reftests/alxbug>;
+my @dirs = <./data/reftests/*>;
 
 for my $dir (@dirs) {
 
