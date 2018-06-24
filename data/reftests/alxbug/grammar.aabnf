@@ -1,0 +1,64 @@
+grammar = *( *s [ definition ] )
+
+definition = rulename s "=" s choice
+
+w = %x20 / %x0A / %x0D / %x09
+s = 1*w *comment
+
+rulename = ALPHA *(ALPHA / DIGIT / "-")
+
+comment = "#" *(%x00-09 / %x0B-0C / %x0E-FF) 1*(%x0A / %x0D)
+
+choice               = [ choice "|" s ]               ordered-choice
+ordered-choice       = [ ordered-choice "/" s ]       exclusion
+exclusion            = [ exclusion "-" s ]            intersection
+intersection         = [ intersection "&" s ]         ordered-intersection
+ordered-intersection = [ ordered-intersection "+" s ] concatenation
+concatenation        = [ concatenation s ]            repetition
+
+repetition = quantified *s
+
+; TODO: wrap instead of having postfix quantifier
+
+element =
+  group
+    / prose
+    / string
+    / reference
+    / not-allowed
+
+group = "(" s element s ")"
+
+not-allowed = "_"
+
+prose = "<" q ">"
+
+string = %x27 "..." %x27
+
+q = "..."
+
+reference = rulename
+
+quantified = 
+    one
+    / optional
+    / zero-or-more
+    / one-or-more
+    / greedy-optional
+    / greedy-zero-or-more
+    / greedy-one-or-more
+    / lazy-optional
+    / lazy-zero-or-more
+    / lazy-one-or-more
+
+one = element
+optional = element "?"
+zero-or-more = element "*"
+one-or-more = element "+"
+greedy-optional = element "{?}"
+greedy-zero-or-more = element "{*}"
+greedy-one-or-more = element "{+}"
+lazy-optional = element "??"
+lazy-zero-or-more = element "*?"
+lazy-one-or-more = element "+?"
+

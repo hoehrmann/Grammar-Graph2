@@ -116,7 +116,7 @@ sub create_t_cxx {
 
   my $path = $self->input_path;
 #  warn "cxx $path";
-  `/home/bjoern/parselov/alx/alx $path > /home/bjoern/parselov/cxx.cbor`;
+  `/home/bjoern/parselov/alx/alx --in=$path --edges=1 --quads=1 > /home/bjoern/parselov/cxx.cbor`;
   open my $fh, '<', '/home/bjoern/parselov/cxx.cbor';
   my $cbor = do { local $/; <$fh>; };
 
@@ -139,7 +139,7 @@ sub create_t_cxx {
       json_extract(each.value, '$[2]') AS dst_pos,
       CAST(json_extract(each.value, '$[3]') AS TEXT) AS dst_vertex
     FROM
-      json_each(json_extract(?, '$[0]')) each
+      json_each(json_extract(?, '$.edges')) each
 /*
     UNION
     SELECT
@@ -175,7 +175,7 @@ sub create_t_cxx {
         json_extract(each.value, '$[6]') AS dst_pos,
         CAST(json_extract(each.value, '$[7]') AS TEXT) AS dst_vertex
       FROM
-        json_each(json_extract(?, '$[1]')) each
+        json_each(json_extract(?, '$.quads')) each
       /* TODO: missing WHERE clause to prevent false start -> final_but_not_partner edges */
     )
     INSERT OR IGNORE INTO t

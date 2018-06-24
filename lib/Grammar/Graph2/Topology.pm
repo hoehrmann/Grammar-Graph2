@@ -422,8 +422,8 @@ sub BUILD {
 
   });
 
-  $self->_add_self_loop_attributes();
   $self->_add_topological_attributes();
+  $self->_add_self_loop_attributes();
   $self->_add_stack_groups();
   $self->_add_skippable();
   $self->_add_representative();
@@ -442,6 +442,20 @@ sub _add_self_loop_attributes {
 
   $self->g->vp_self_loop(@$_)
     for @self_loop;
+
+  # Workaround for reftests/alxbug
+  $self->_dbh->do(q{
+    UPDATE
+      vertex_property
+    SET
+      self_loop = (
+        SELECT MIN(vertex_p.self_loop)
+        FROM vertex_property vertex_p
+        WHERE vertex_p.name = vertex_property.name
+      )
+    WHERE
+      name IS NOT NULL
+  }) if 1;
 
   my @contents_self_loop = $self->_dbh->selectall_array(q{
     SELECT vertex, self_loop

@@ -378,7 +378,7 @@ sub from_grammar_graph {
 #    $self->vp_shadows($v, $old->vp_shadows($v))
 #      if $old->g->has_vertex_attribute($v, 'shadows');
 
-    my $type = $old->vp_type($v);
+    my $type = $old->vp_type($v) // 'empty';
 
     if ($type eq 'charClass') {
       $self->vp_type($v, 'Input');
