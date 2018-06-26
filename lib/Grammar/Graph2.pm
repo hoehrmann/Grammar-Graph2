@@ -263,6 +263,9 @@ sub from_grammar_graph {
   my $dbh = $g->{dbh};
 
   local $dbh->{sqlite_allow_multiple_statements} = 1;
+  
+  # @@@
+  $dbh->{RaiseError} = 1;
 
   $dbh->do(q{
     CREATE TABLE vertex_property (

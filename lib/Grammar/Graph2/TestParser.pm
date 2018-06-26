@@ -116,7 +116,7 @@ sub create_t_cxx {
 
   my $path = $self->input_path;
 #  warn "cxx $path";
-  `/home/bjoern/parselov/alx/alx --in=$path --edges=1 --quads=1 > /home/bjoern/parselov/cxx.cbor`;
+  `/home/bjoern/parselov/alx/alx --in=$path --edges=1 --quads=1 --out=/dev/stdout > /home/bjoern/parselov/cxx.cbor`;
   open my $fh, '<', '/home/bjoern/parselov/cxx.cbor';
   my $cbor = do { local $/; <$fh>; };
 
@@ -192,34 +192,6 @@ sub create_t_cxx {
       base
   }, {}, $json);
 
-  # FIXME: redundant now?
-  $self->_dbh->do(q{
-    WITH
-    bad AS (
-      SELECT
-        t.rowid
-      FROM
-        t 
-          INNER JOIN view_vp_plus src_p
-            ON (src_p.vertex = t.src_vertex)
-          INNER JOIN view_vp_plus dst_p
-            ON (dst_p.vertex = t.dst_vertex)
-      WHERE
-        src_p.is_push
-        AND
-        dst_p.is_pop
-        AND
-        src_p.partner <> dst_p.vertex
-        AND
-        mid_src_pos IS NULL
-    )
-    DELETE
-    FROM 
-      t
-    WHERE
-      t.rowid IN (SELECT * FROM bad)
-  });
-
 }
 
 # TODO: rename to compute_t or whatever
@@ -230,7 +202,9 @@ sub create_t {
   $self->create_t_cxx();
 
   warn "done with cxx";
-  $self->_dbh->sqlite_backup_to_file('WONDER.sqlite');
+#  $self->_dbh->sqlite_backup_to_file('WONDER.sqlite');
+
+  return;
 
   $self->_dbh->do(q{ ANALYZE });
 

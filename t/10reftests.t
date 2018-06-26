@@ -71,7 +71,12 @@ eval {
 
     is_deeply $got->{parent_child_signature},
       $expected->{parent_child_signature},
-      $path_prefix . ' parent_child_signature';
+      $path_prefix . ' parent_child_signature' or diag(
+        Dump {
+          got => $got->{parent_child_signature},
+          expected => $expected->{parent_child_signature}
+        }
+      );
 
     is_deeply $got->{sibling_signature},
       $expected->{sibling_signature},
@@ -79,7 +84,12 @@ eval {
 
     is_deeply $got->{all_matches},
       $expected->{all_matches},
-      $path_prefix . ' all_matches';
+      $path_prefix . ' all_matches' or diag(
+        Dump {
+          got => $got->{all_matches},
+          expected => $expected->{all_matches}
+        }
+      );
 
     is_deeply $got->{grammar_self_loops},
       $expected->{grammar_self_loops},

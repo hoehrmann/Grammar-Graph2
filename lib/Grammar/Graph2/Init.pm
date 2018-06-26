@@ -292,17 +292,23 @@ sub _new_cond {
 
   # TODO: is this still the case? ^
 
-  my ($if1_regular) = map { $_ ne 'linear' } $g2->_dbh->selectrow_array(q{
+  my ($if1_regular) = map { $_ eq 'no' } $g2->_dbh->selectrow_array(q{
     SELECT self_loop
     FROM view_contents_self_loop
     WHERE vertex = ?
   }, {}, $if1);
 
-  my ($if2_regular) = map { $_ ne 'linear' } $g2->_dbh->selectrow_array(q{
+  my ($if2_regular) = map { $_ eq 'no' } $g2->_dbh->selectrow_array(q{
     SELECT self_loop
     FROM view_contents_self_loop
     WHERE vertex = ?
   }, {}, $if2);
+
+  $g2->_log->debugf("if1_regular: %s", $if1_regular);
+  $g2->_log->debugf("if2_regular: %s", $if2_regular);
+
+  # Those ^ make no sense, for one thing, self_loop is tri-state,
+  # and the code produces the same result for 'no' and 'irregular'
 
   my $automata = Grammar::Graph2::Automata->new(
     base_graph => $g2,
@@ -328,19 +334,60 @@ sub _new_cond {
 
     if ($op eq '#exclusion') {
       if ($if2_regular) {
+        $g2->_log->debugf("FOO %u{%u,%u} %u %u ergo %u", $if, $fi1, $fi2, $set{$fi1}, $set{$fi2}, ($set{$fi1} && !$set{$fi2}));
         return ($set{$fi1} and not $set{$fi2});
       }
+      $g2->_log->debugf("FOO2 %u %u %u", $if, $set{$fi1}, $set{$fi2});
       return $set{$fi1};
     }
 
     return $set{$fi};
+
   }) if 1;
 
   $g2->_log->debugf("ACCEPTING: %s", "@accepting");
 
   my %state_to_vertex = $automata->_insert_dfa($d, $start_id);
 
+=pod
+
+$g2->_log->debugf("about to die for %u", $if);
+die if $g2->_dbh->selectrow_array(q{
+
+select vp.vertex, a.vertex, a.shadows, b.shadows from vertex_shadows a inner join vertex_shadows b on (a.vertex = b.vertex) inner join view_vp_plus vp on (vp.p1 = a.shadows and vp.p2 = b.shadows and vp.name = '#exclusion' and vp.is_pop)
+
+}, {});
+
+=cut
+
   $g2->_log->debugf("state_to_vertex: " . Dump \%state_to_vertex);
+
+  if ($op eq '#exclusion' and $if2_regular) {
+
+    $g2->_dbh->do(
+      q{
+        DELETE
+        FROM
+          vertex_shadows
+        WHERE
+          vertex IN (SELECT CAST(value AS TEXT) FROM json_each(?))
+          AND
+          shadows = CAST(? AS TEXT)
+          AND
+          EXISTS (
+            SELECT 1
+            FROM vertex_shadows vs
+            WHERE vertex_shadows.vertex = vs.vertex
+              AND vs.shadows = CAST(? AS TEXT)
+          )
+      },
+      {},
+      $g2->_json->encode([ values %state_to_vertex ]),
+      $fi,
+      $fi2
+    );
+
+  }
 
   # If there is no irregular recursion between If1 and Fi1, and
   # there is no path from If1 to itself that does not go over Fi1,
@@ -389,6 +436,21 @@ sub _new_cond {
   # mainly to ensure that for #ordered_choice with a regular
   # If1 structure, the Fi2 vertex does not end up unshadowed.
   $g2->add_shadows($state_to_vertex{ $d->dead_state_id }, $fi2);
+
+=pod
+
+  $g2->_dbh->sqlite_backup_to_file("$if.sqlite");
+
+$g2->_log->debugf("about to die for %u", $if);
+
+die if $g2->_dbh->selectrow_array(q{
+
+select vp.vertex, a.vertex, a.shadows, b.shadows from vertex_shadows a inner join vertex_shadows b on (a.vertex = b.vertex) inner join view_vp_plus vp on (vp.p1 = a.shadows and vp.p2 = b.shadows and vp.name = '#exclusion' and vp.is_pop)
+
+}, {});
+
+=cut
+
 }
 
 sub _shadowed_subgraph_between {

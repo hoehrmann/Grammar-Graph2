@@ -43,18 +43,7 @@
          "no"
       ]
    ],
-   "parent_child_signature":[
-      [
-         1,
-         "",
-         null,
-         null,
-         null,
-         null,
-         22,
-         ""
-      ]
-   ],
+   "parent_child_signature":[],
    "random_matches":[],
    "sibling_signature":[]
 }
