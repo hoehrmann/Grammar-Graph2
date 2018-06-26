@@ -34,7 +34,7 @@ use Grammar::Graph2::TestCase;
 local $Storable::canonical = 1;
 
 # my @dirs = <./data/reftests/alxbug>;
-my @dirs = <./data/reftests/xml2015-pi*>;
+my @dirs = <./data/reftests/xml2015-element*>;
 
 for my $dir (@dirs) {
 

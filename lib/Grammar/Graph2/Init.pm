@@ -292,6 +292,9 @@ sub _new_cond {
 
   # TODO: is this still the case? ^
 
+  # TODO: It is probably necessary to mark if/fi irregular if they
+  # have irregular contents, or at least mark them non-skippable.
+
   my ($if1_regular) = map { $_ eq 'no' } $g2->_dbh->selectrow_array(q{
     SELECT self_loop
     FROM view_contents_self_loop
@@ -413,15 +416,23 @@ select vp.vertex, a.vertex, a.shadows, b.shadows from vertex_shadows a inner joi
         fi1_p.vertex = ?
         AND
         fi2_p.vertex = ?
-    }, {}, $fi1, $fi2);
+        AND
+        vs1.vertex IN (
+          SELECT CAST(value AS TEXT)
+          FROM json_each(?)
+        )
+    }, {}, $fi1, $fi2,
+      $g2->_json->encode([ values %state_to_vertex ]));
 
     for my $v (@candidates) {
+
+      # TODO: limit to vertices in @accepting
 
       $g2->_log->debugf("Removing If2 vertex %u from vertex %u",
         $fi2, $v);
 
       # FIXME: disabled due to bug
-      next;
+#      next;
 
       $g2->_dbh->do(q{
         DELETE

@@ -198,17 +198,17 @@ sub create_t_cxx {
 sub create_t {
   my ($self) = @_;
 
-#  $self->create_t_perlsql();
-  $self->create_t_cxx();
+  $self->create_t_perlsql();
+#  $self->create_t_cxx();
 
   warn "done with cxx";
 #  $self->_dbh->sqlite_backup_to_file('WONDER.sqlite');
 
-  return;
-
   $self->_dbh->do(q{ ANALYZE });
 
   $self->_cleanup_ordered_choice();
+
+  return;
 
   $self->_dbh->do(q{
     DELETE FROM t
