@@ -53,11 +53,15 @@ sub _init {
 
   $self->_rename_vertices();
 
-  Grammar::Graph2::Megamata->new(
-    base_graph => $self,
-  )->mega if 0;
+  if (0) {
+    $self->_log->debug('starting mega');
 
-  $self->_log->debug('done mega');
+    Grammar::Graph2::Megamata->new(
+      base_graph => $self,
+    )->mega;
+
+    $self->_log->debug('done mega');
+  }
 
   $self->_log->debug('starting _replace_conditionals');
   $self->_replace_conditionals();
@@ -295,15 +299,24 @@ sub _new_cond {
   # TODO: It is probably necessary to mark if/fi irregular if they
   # have irregular contents, or at least mark them non-skippable.
 
+  my $db_utils = Grammar::Graph2::DBUtils->new(
+    g => $g2);
+
+  # TODO: view access the view instead of asking vertex_property?
+
+  $db_utils->views_to_tables(
+    'view_contents_self_loop',
+  );
+
   my ($if1_regular) = map { $_ eq 'no' } $g2->_dbh->selectrow_array(q{
     SELECT self_loop
-    FROM view_contents_self_loop
+    FROM m_view_contents_self_loop
     WHERE vertex = ?
   }, {}, $if1);
 
   my ($if2_regular) = map { $_ eq 'no' } $g2->_dbh->selectrow_array(q{
     SELECT self_loop
-    FROM view_contents_self_loop
+    FROM m_view_contents_self_loop
     WHERE vertex = ?
   }, {}, $if2);
 
@@ -745,6 +758,8 @@ sub _merge_duplicates {
     # TODO: table/column name quoting
 
     my $table = shift @$ref;
+
+    # TODO: IGNORE rather than ... REPLACE or something?
 
     my $sql = sprintf q{
       UPDATE OR IGNORE %s SET 

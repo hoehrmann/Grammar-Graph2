@@ -367,8 +367,14 @@ sub from_grammar_graph {
     }
 
     if ($old->g->has_vertex_attribute($v, 'name')) {
-      $self->vp_name($v, $old->vp_name($v));
-    }      
+      my $name = $old->vp_name($v);
+      $self->vp_name($v, $name);
+      my $type = $old->vp_type($v) // 'empty';
+      if ($type eq 'If' or $type eq 'Fi') {
+        $self->vp_name( $self->vp_p1($v), $name );
+        $self->vp_name( $self->vp_p2($v), $name );
+      }
+    }
 
     if ($old->g->has_vertex_attribute($v, 'partner')) {
       $self->vp_partner($v, $old->vp_partner($v));
