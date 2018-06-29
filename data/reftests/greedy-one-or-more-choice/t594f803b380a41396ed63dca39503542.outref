@@ -60,31 +60,31 @@
                "#ordered_choice",
                [
                   [
-                     "",
+                     "#ordered_choice",
                      [
                         [
                            "#ordered_choice",
                            [
                               [
-                                 "",
+                                 "#ordered_choice",
                                  [
                                     [
                                        "#ordered_choice",
                                        [
                                           [
-                                             "",
+                                             "#ordered_choice",
                                              [
                                                 [
                                                    "#ordered_choice",
                                                    [
                                                       [
-                                                         "",
+                                                         "#ordered_choice",
                                                          [
                                                             [
                                                                "#ordered_choice",
                                                                [
                                                                   [
-                                                                     "",
+                                                                     "#ordered_choice",
                                                                      [],
                                                                      5,
                                                                      5
@@ -129,7 +129,7 @@
                "#ordered_choice",
                [
                   [
-                     "",
+                     "#ordered_choice",
                      [],
                      6,
                      6
@@ -168,16 +168,6 @@
    "parent_child_signature":[
       [
          1,
-         null,
-         2,
-         "#ordered_choice",
-         5,
-         "#ordered_choice",
-         5,
-         null
-      ],
-      [
-         1,
          "",
          1,
          "#ordered_choice",
@@ -190,109 +180,119 @@
          1,
          "#ordered_choice",
          1,
-         null,
+         "#ordered_choice",
          5,
-         null,
+         "#ordered_choice",
+         5,
+         "#ordered_choice"
+      ],
+      [
+         1,
+         "#ordered_choice",
+         2,
+         "#ordered_choice",
+         5,
+         "#ordered_choice",
          5,
          "#ordered_choice"
       ],
       [
          2,
-         null,
-         3,
+         "#ordered_choice",
+         2,
          "#ordered_choice",
          5,
          "#ordered_choice",
          5,
-         null
+         "#ordered_choice"
       ],
       [
          2,
          "#ordered_choice",
-         2,
-         null,
+         3,
+         "#ordered_choice",
          5,
-         null,
+         "#ordered_choice",
          5,
          "#ordered_choice"
       ],
       [
          3,
-         null,
-         4,
+         "#ordered_choice",
+         3,
          "#ordered_choice",
          5,
          "#ordered_choice",
          5,
-         null
+         "#ordered_choice"
       ],
       [
          3,
          "#ordered_choice",
-         3,
-         null,
+         4,
+         "#ordered_choice",
          5,
-         null,
+         "#ordered_choice",
          5,
          "#ordered_choice"
       ],
       [
          4,
-         null,
-         5,
+         "#ordered_choice",
+         4,
          "#ordered_choice",
          5,
          "#ordered_choice",
          5,
-         null
+         "#ordered_choice"
       ],
       [
          4,
          "#ordered_choice",
-         4,
-         null,
          5,
+         "#ordered_choice",
+         5,
+         "#ordered_choice",
+         5,
+         "#ordered_choice"
+      ],
+      [
+         5,
+         "#ordered_choice",
+         null,
+         null,
+         null,
          null,
          5,
          "#ordered_choice"
       ],
       [
          5,
-         null,
-         null,
-         null,
-         null,
-         null,
-         5,
-         null
-      ],
-      [
+         "#ordered_choice",
          5,
          "#ordered_choice",
          5,
-         null,
-         5,
-         null,
+         "#ordered_choice",
          5,
          "#ordered_choice"
       ],
       [
          6,
-         null,
+         "#ordered_choice",
          null,
          null,
          null,
          null,
          6,
-         null
+         "#ordered_choice"
       ],
       [
          6,
          "#ordered_choice",
          6,
-         null,
+         "#ordered_choice",
          6,
-         null,
+         "#ordered_choice",
          6,
          "#ordered_choice"
       ]

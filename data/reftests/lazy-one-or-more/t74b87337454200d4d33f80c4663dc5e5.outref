@@ -36,7 +36,7 @@
                "#ordered_choice",
                [
                   [
-                     "",
+                     "#ordered_choice",
                      [],
                      2,
                      5
@@ -77,21 +77,21 @@
       ],
       [
          2,
-         null,
+         "#ordered_choice",
          null,
          null,
          null,
          null,
          5,
-         null
+         "#ordered_choice"
       ],
       [
          2,
          "#ordered_choice",
          2,
-         null,
+         "#ordered_choice",
          5,
-         null,
+         "#ordered_choice",
          5,
          "#ordered_choice"
       ]
