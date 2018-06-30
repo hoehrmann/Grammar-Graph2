@@ -50,9 +50,429 @@
          ],
          1,
          6
+      ],
+      [
+         "",
+         [
+            [
+               "S",
+               [
+                  [
+                     "A",
+                     [
+                        [
+                           "B",
+                           [],
+                           1,
+                           2
+                        ],
+                        [
+                           "B",
+                           [],
+                           2,
+                           3
+                        ],
+                        [
+                           "B",
+                           [],
+                           3,
+                           4
+                        ],
+                        [
+                           "D",
+                           [],
+                           4,
+                           5
+                        ],
+                        [
+                           "D",
+                           [],
+                           5,
+                           6
+                        ]
+                     ],
+                     1,
+                     6
+                  ]
+               ],
+               1,
+               6
+            ]
+         ],
+         1,
+         6
+      ],
+      [
+         "",
+         [
+            [
+               "S",
+               [
+                  [
+                     "A",
+                     [
+                        [
+                           "B",
+                           [],
+                           1,
+                           2
+                        ],
+                        [
+                           "B",
+                           [],
+                           2,
+                           3
+                        ],
+                        [
+                           "D",
+                           [],
+                           3,
+                           4
+                        ],
+                        [
+                           "D",
+                           [],
+                           4,
+                           5
+                        ],
+                        [
+                           "D",
+                           [],
+                           5,
+                           6
+                        ]
+                     ],
+                     1,
+                     6
+                  ]
+               ],
+               1,
+               6
+            ]
+         ],
+         1,
+         6
+      ],
+      [
+         "",
+         [
+            [
+               "S",
+               [
+                  [
+                     "A",
+                     [
+                        [
+                           "B",
+                           [],
+                           1,
+                           2
+                        ],
+                        [
+                           "D",
+                           [],
+                           2,
+                           3
+                        ],
+                        [
+                           "D",
+                           [],
+                           3,
+                           4
+                        ],
+                        [
+                           "D",
+                           [],
+                           4,
+                           5
+                        ],
+                        [
+                           "D",
+                           [],
+                           5,
+                           6
+                        ]
+                     ],
+                     1,
+                     6
+                  ]
+               ],
+               1,
+               6
+            ]
+         ],
+         1,
+         6
       ]
    ],
    "all_tree_matches":[
+      [
+         "",
+         [
+            [
+               "#ordered_choice",
+               [
+                  [
+                     "#ordered_choice",
+                     [
+                        [
+                           "#ordered_choice",
+                           [
+                              [
+                                 "#ordered_choice",
+                                 [],
+                                 2,
+                                 2
+                              ]
+                           ],
+                           2,
+                           2
+                        ]
+                     ],
+                     1,
+                     2
+                  ]
+               ],
+               1,
+               2
+            ],
+            [
+               "#ordered_choice",
+               [
+                  [
+                     "#ordered_choice",
+                     [
+                        [
+                           "#ordered_choice",
+                           [
+                              [
+                                 "#ordered_choice",
+                                 [
+                                    [
+                                       "#ordered_choice",
+                                       [
+                                          [
+                                             "#ordered_choice",
+                                             [
+                                                [
+                                                   "#ordered_choice",
+                                                   [
+                                                      [
+                                                         "#ordered_choice",
+                                                         [],
+                                                         6,
+                                                         6
+                                                      ]
+                                                   ],
+                                                   6,
+                                                   6
+                                                ]
+                                             ],
+                                             5,
+                                             6
+                                          ]
+                                       ],
+                                       5,
+                                       6
+                                    ]
+                                 ],
+                                 4,
+                                 6
+                              ]
+                           ],
+                           4,
+                           6
+                        ]
+                     ],
+                     3,
+                     6
+                  ]
+               ],
+               3,
+               6
+            ]
+         ],
+         1,
+         6
+      ],
+      [
+         "",
+         [
+            [
+               "#ordered_choice",
+               [
+                  [
+                     "#ordered_choice",
+                     [
+                        [
+                           "#ordered_choice",
+                           [
+                              [
+                                 "#ordered_choice",
+                                 [
+                                    [
+                                       "#ordered_choice",
+                                       [
+                                          [
+                                             "#ordered_choice",
+                                             [],
+                                             3,
+                                             3
+                                          ]
+                                       ],
+                                       3,
+                                       3
+                                    ]
+                                 ],
+                                 2,
+                                 3
+                              ]
+                           ],
+                           2,
+                           3
+                        ]
+                     ],
+                     1,
+                     3
+                  ]
+               ],
+               1,
+               3
+            ],
+            [
+               "#ordered_choice",
+               [
+                  [
+                     "#ordered_choice",
+                     [
+                        [
+                           "#ordered_choice",
+                           [
+                              [
+                                 "#ordered_choice",
+                                 [
+                                    [
+                                       "#ordered_choice",
+                                       [
+                                          [
+                                             "#ordered_choice",
+                                             [],
+                                             6,
+                                             6
+                                          ]
+                                       ],
+                                       6,
+                                       6
+                                    ]
+                                 ],
+                                 5,
+                                 6
+                              ]
+                           ],
+                           5,
+                           6
+                        ]
+                     ],
+                     4,
+                     6
+                  ]
+               ],
+               4,
+               6
+            ]
+         ],
+         1,
+         6
+      ],
+      [
+         "",
+         [
+            [
+               "#ordered_choice",
+               [
+                  [
+                     "#ordered_choice",
+                     [
+                        [
+                           "#ordered_choice",
+                           [
+                              [
+                                 "#ordered_choice",
+                                 [
+                                    [
+                                       "#ordered_choice",
+                                       [
+                                          [
+                                             "#ordered_choice",
+                                             [
+                                                [
+                                                   "#ordered_choice",
+                                                   [
+                                                      [
+                                                         "#ordered_choice",
+                                                         [],
+                                                         4,
+                                                         4
+                                                      ]
+                                                   ],
+                                                   4,
+                                                   4
+                                                ]
+                                             ],
+                                             3,
+                                             4
+                                          ]
+                                       ],
+                                       3,
+                                       4
+                                    ]
+                                 ],
+                                 2,
+                                 4
+                              ]
+                           ],
+                           2,
+                           4
+                        ]
+                     ],
+                     1,
+                     4
+                  ]
+               ],
+               1,
+               4
+            ],
+            [
+               "#ordered_choice",
+               [
+                  [
+                     "#ordered_choice",
+                     [
+                        [
+                           "#ordered_choice",
+                           [
+                              [
+                                 "#ordered_choice",
+                                 [],
+                                 6,
+                                 6
+                              ]
+                           ],
+                           6,
+                           6
+                        ]
+                     ],
+                     5,
+                     6
+                  ]
+               ],
+               5,
+               6
+            ]
+         ],
+         1,
+         6
+      ],
       [
          "",
          [
@@ -181,9 +601,69 @@
          "#ordered_choice",
          1,
          "#ordered_choice",
+         2,
+         "#ordered_choice",
+         2,
+         "#ordered_choice"
+      ],
+      [
+         1,
+         "#ordered_choice",
+         1,
+         "#ordered_choice",
+         3,
+         "#ordered_choice",
+         3,
+         "#ordered_choice"
+      ],
+      [
+         1,
+         "#ordered_choice",
+         1,
+         "#ordered_choice",
+         4,
+         "#ordered_choice",
+         4,
+         "#ordered_choice"
+      ],
+      [
+         1,
+         "#ordered_choice",
+         1,
+         "#ordered_choice",
          5,
          "#ordered_choice",
          5,
+         "#ordered_choice"
+      ],
+      [
+         1,
+         "#ordered_choice",
+         2,
+         "#ordered_choice",
+         2,
+         "#ordered_choice",
+         2,
+         "#ordered_choice"
+      ],
+      [
+         1,
+         "#ordered_choice",
+         2,
+         "#ordered_choice",
+         3,
+         "#ordered_choice",
+         3,
+         "#ordered_choice"
+      ],
+      [
+         1,
+         "#ordered_choice",
+         2,
+         "#ordered_choice",
+         4,
+         "#ordered_choice",
+         4,
          "#ordered_choice"
       ],
       [
@@ -199,6 +679,46 @@
       [
          2,
          "#ordered_choice",
+         null,
+         null,
+         null,
+         null,
+         2,
+         "#ordered_choice"
+      ],
+      [
+         2,
+         "#ordered_choice",
+         2,
+         "#ordered_choice",
+         2,
+         "#ordered_choice",
+         2,
+         "#ordered_choice"
+      ],
+      [
+         2,
+         "#ordered_choice",
+         2,
+         "#ordered_choice",
+         3,
+         "#ordered_choice",
+         3,
+         "#ordered_choice"
+      ],
+      [
+         2,
+         "#ordered_choice",
+         2,
+         "#ordered_choice",
+         4,
+         "#ordered_choice",
+         4,
+         "#ordered_choice"
+      ],
+      [
+         2,
+         "#ordered_choice",
          2,
          "#ordered_choice",
          5,
@@ -211,9 +731,59 @@
          "#ordered_choice",
          3,
          "#ordered_choice",
+         3,
+         "#ordered_choice",
+         3,
+         "#ordered_choice"
+      ],
+      [
+         2,
+         "#ordered_choice",
+         3,
+         "#ordered_choice",
+         4,
+         "#ordered_choice",
+         4,
+         "#ordered_choice"
+      ],
+      [
+         2,
+         "#ordered_choice",
+         3,
+         "#ordered_choice",
          5,
          "#ordered_choice",
          5,
+         "#ordered_choice"
+      ],
+      [
+         3,
+         "#ordered_choice",
+         null,
+         null,
+         null,
+         null,
+         3,
+         "#ordered_choice"
+      ],
+      [
+         3,
+         "#ordered_choice",
+         3,
+         "#ordered_choice",
+         3,
+         "#ordered_choice",
+         3,
+         "#ordered_choice"
+      ],
+      [
+         3,
+         "#ordered_choice",
+         3,
+         "#ordered_choice",
+         4,
+         "#ordered_choice",
+         4,
          "#ordered_choice"
       ],
       [
@@ -229,11 +799,61 @@
       [
          3,
          "#ordered_choice",
+         3,
+         "#ordered_choice",
+         6,
+         "#ordered_choice",
+         6,
+         "#ordered_choice"
+      ],
+      [
+         3,
+         "#ordered_choice",
+         4,
+         "#ordered_choice",
+         4,
+         "#ordered_choice",
+         4,
+         "#ordered_choice"
+      ],
+      [
+         3,
+         "#ordered_choice",
          4,
          "#ordered_choice",
          5,
          "#ordered_choice",
          5,
+         "#ordered_choice"
+      ],
+      [
+         3,
+         "#ordered_choice",
+         4,
+         "#ordered_choice",
+         6,
+         "#ordered_choice",
+         6,
+         "#ordered_choice"
+      ],
+      [
+         4,
+         "#ordered_choice",
+         null,
+         null,
+         null,
+         null,
+         4,
+         "#ordered_choice"
+      ],
+      [
+         4,
+         "#ordered_choice",
+         4,
+         "#ordered_choice",
+         4,
+         "#ordered_choice",
+         4,
          "#ordered_choice"
       ],
       [
@@ -249,11 +869,31 @@
       [
          4,
          "#ordered_choice",
-         5,
+         4,
+         "#ordered_choice",
+         6,
+         "#ordered_choice",
+         6,
+         "#ordered_choice"
+      ],
+      [
+         4,
          "#ordered_choice",
          5,
          "#ordered_choice",
          5,
+         "#ordered_choice",
+         5,
+         "#ordered_choice"
+      ],
+      [
+         4,
+         "#ordered_choice",
+         5,
+         "#ordered_choice",
+         6,
+         "#ordered_choice",
+         6,
          "#ordered_choice"
       ],
       [
@@ -274,6 +914,26 @@
          5,
          "#ordered_choice",
          5,
+         "#ordered_choice"
+      ],
+      [
+         5,
+         "#ordered_choice",
+         5,
+         "#ordered_choice",
+         6,
+         "#ordered_choice",
+         6,
+         "#ordered_choice"
+      ],
+      [
+         5,
+         "#ordered_choice",
+         6,
+         "#ordered_choice",
+         6,
+         "#ordered_choice",
+         6,
          "#ordered_choice"
       ],
       [
@@ -314,19 +974,19 @@
                            2
                         ],
                         [
-                           "B",
+                           "D",
                            [],
                            2,
                            3
                         ],
                         [
-                           "B",
+                           "D",
                            [],
                            3,
                            4
                         ],
                         [
-                           "B",
+                           "D",
                            [],
                            4,
                            5
@@ -351,6 +1011,24 @@
       ]
    ],
    "sibling_signature":[
+      [
+         2,
+         "#ordered_choice",
+         3,
+         "#ordered_choice"
+      ],
+      [
+         3,
+         "#ordered_choice",
+         4,
+         "#ordered_choice"
+      ],
+      [
+         4,
+         "#ordered_choice",
+         5,
+         "#ordered_choice"
+      ],
       [
          5,
          "#ordered_choice",

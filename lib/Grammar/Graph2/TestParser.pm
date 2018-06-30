@@ -107,6 +107,11 @@ sub create_t_perlsql {
   $self->_create_collapsed_to_stack_vertices();
 
   $self->_create_trees_bottom_up();
+
+  $self->_dbh->do(q{ ANALYZE });
+
+  $self->_cleanup_ordered_choice();
+
 }
 
 sub create_t_cxx {
@@ -192,6 +197,8 @@ sub create_t_cxx {
       base
   }, {}, $json);
 
+#  $self->_dbh->sqlite_backup_to_file('BUG.sqlite');
+
 }
 
 # TODO: rename to compute_t or whatever
@@ -202,11 +209,10 @@ sub create_t {
   $self->create_t_cxx();
 
   warn "done with cxx";
+
 #  $self->_dbh->sqlite_backup_to_file('WONDER.sqlite');
 
   $self->_dbh->do(q{ ANALYZE });
-
-  $self->_cleanup_ordered_choice();
 
   return;
 
@@ -1303,6 +1309,8 @@ sub _cleanup_ordered_choice {
           WHERE inner_t.src_pos = t.src_pos
             AND inner_t.src_vertex = t.src_vertex
             AND inner_t.mid_src_vertex = src_p.p1
+            -- 
+            AND inner_t.dst_pos = t.dst_pos
         )
     )
     DELETE
@@ -1319,9 +1327,15 @@ sub _cleanup_ordered_choice {
       )
   });
 
+  $self->_log->debugf("cleanup affected %u", $affected1);
+
   return unless $affected1 > 0;
 
+  # Steps below probably no longer necessary for perl/sql
+
   $self->_create_without_unreachable_vertices();
+
+# return; # @@@
 
   $self->_dbh->do(q{
     WITH
