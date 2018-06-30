@@ -143,6 +143,8 @@ sub mega {
   }, 'vertex');
 
   my %state_to_vertex = $automata->_insert_dfa($d, @start_ids);
+
+  $g2->_dbh->sqlite_backup_to_file('MEGA-INSERTED.sqlite');
 }
 
 1;

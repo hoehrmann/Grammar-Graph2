@@ -54,6 +54,9 @@ sub _init {
   $self->_rename_vertices();
 
   if (0) {
+
+    # used to come before replace_conditionals 
+
     $self->_log->debug('starting mega');
 
     Grammar::Graph2::Megamata->new(
@@ -67,7 +70,9 @@ sub _init {
   $self->_replace_conditionals();
   $self->_log->debug('done _replace_conditionals');
 
-  $self->_cover_root();
+#  $self->_dbh->sqlite_backup_to_file('post-conditionals.sqlite');
+
+#  $self->_cover_root();
   $self->_log->debug('done cover root');
 
   $self->_cover_epsilons();
@@ -273,6 +278,20 @@ sub _new_cond {
   my (undef, $if1, $if2, $fi2, $fi1, $fi) =
     $g2->conditionals_from_if($if);
 
+
+  my $overlap =
+    graph_vertices_between($g2->g, $if1, $fi2)
+    ||
+    graph_vertices_between($g2->g, $if2, $fi1)
+    ;
+
+  # If the subgraph from if1 to fi1 has any vertex in common with
+  # the subgraph from if2 to fi2 then a DFA state may be created
+  # that contains fi1 and fi2 even though only one of them matched.
+  # That can conflict with the later attempt to resolve the If 
+  # structure completely. 
+  warn "if1..fi1 and if2..fi2 should not overlap" if $overlap;
+
   $g2->_log->debugf('Pre-computing If structure %s', join " ", $if, $if1, $if2, $fi2, $fi1, $fi);
 
   my $op = $g2->vp_name($if);
@@ -298,6 +317,7 @@ sub _new_cond {
 
   # TODO: It is probably necessary to mark if/fi irregular if they
   # have irregular contents, or at least mark them non-skippable.
+  # TODO: don't we do that ^ now?
 
   my $db_utils = Grammar::Graph2::DBUtils->new(
     g => $g2);
@@ -325,6 +345,7 @@ sub _new_cond {
 
   # Those ^ make no sense, for one thing, self_loop is tri-state,
   # and the code produces the same result for 'no' and 'irregular'
+  # TODO: Is that ^ still true and relevant?
 
   my $automata = Grammar::Graph2::Automata->new(
     base_graph => $g2,
@@ -360,6 +381,8 @@ sub _new_cond {
     return $set{$fi};
 
   }) if 1;
+
+  $d->_dbh->sqlite_backup_to_file($if . ".dfa.sqlite");
 
   $g2->_log->debugf("ACCEPTING: %s", "@accepting");
 
@@ -410,6 +433,8 @@ select vp.vertex, a.vertex, a.shadows, b.shadows from vertex_shadows a inner joi
   # then any path from If1 to Fi1 is a proper match and there is
   # no point in offering the Fi2 to later stages, so when a DFA
   # state represents both Fi1 and Fi2 the Fi2 vertex is removed.
+
+  # TODO: analogous cleanup logic for #ordered_conjunction
 
   if ($if1_regular and $op eq '#ordered_choice') {
     my @candidates = map { @$_ } $g2->_dbh->selectall_array(q{
