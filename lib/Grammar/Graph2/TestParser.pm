@@ -205,8 +205,8 @@ sub create_t_cxx {
 sub create_t {
   my ($self) = @_;
 
-#  $self->create_t_perlsql();
-  $self->create_t_cxx();
+  $self->create_t_perlsql();
+#  $self->create_t_cxx();
 
   warn "done with cxx";
 
@@ -1163,7 +1163,10 @@ sub _create_trees_bottom_up {
         
 
     AND (
-      src_p.type <> 'If' OR 
+      src_p.type <> 'If'
+      OR 
+      NOT(mid1_p.is_push)
+      OR
 
       -- TODO: what if 'If' goes from start to end
 

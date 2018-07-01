@@ -289,8 +289,10 @@ sub _new_cond {
   # the subgraph from if2 to fi2 then a DFA state may be created
   # that contains fi1 and fi2 even though only one of them matched.
   # That can conflict with the later attempt to resolve the If 
-  # structure completely. 
-  warn "if1..fi1 and if2..fi2 should not overlap" if $overlap;
+  # structure completely. TODO: this needs to be addressed in a
+  # greater refactoring that also handles "skippable" setting.
+  # TODO: this has been addressed below, rephrase comment ^
+  warn "if1..fi1 and if2..fi2 overlap" if $overlap;
 
   $g2->_log->debugf('Pre-computing If structure %s', join " ", $if, $if1, $if2, $fi2, $fi1, $fi);
 
@@ -319,6 +321,11 @@ sub _new_cond {
   # have irregular contents, or at least mark them non-skippable.
   # TODO: don't we do that ^ now?
 
+  my $if1_regular;
+  my $if2_regular;
+
+if (0) {
+
   my $db_utils = Grammar::Graph2::DBUtils->new(
     g => $g2);
 
@@ -328,24 +335,40 @@ sub _new_cond {
     'view_contents_self_loop',
   );
 
-  my ($if1_regular) = map { $_ eq 'no' } $g2->_dbh->selectrow_array(q{
+  ($if1_regular) = map { $_ eq 'no' } $g2->_dbh->selectrow_array(q{
     SELECT self_loop
     FROM m_view_contents_self_loop
     WHERE vertex = ?
   }, {}, $if1);
 
-  my ($if2_regular) = map { $_ eq 'no' } $g2->_dbh->selectrow_array(q{
+  ($if2_regular) = map { $_ eq 'no' } $g2->_dbh->selectrow_array(q{
     SELECT self_loop
     FROM m_view_contents_self_loop
     WHERE vertex = ?
   }, {}, $if2);
 
-  $g2->_log->debugf("if1_regular: %s", $if1_regular);
-  $g2->_log->debugf("if2_regular: %s", $if2_regular);
-
   # Those ^ make no sense, for one thing, self_loop is tri-state,
   # and the code produces the same result for 'no' and 'irregular'
-  # TODO: Is that ^ still true and relevant?
+  # TODO: Is that ^ still true and relevant? Does it affect `else`?
+
+} else {
+
+  ($if1_regular) = map { $_ eq 'no' } $g2->_dbh->selectrow_array(q{
+    SELECT contents_self_loop
+    FROM vertex_property
+    WHERE vertex = ?
+  }, {}, $if1);
+
+  ($if2_regular) = map { $_ eq 'no' } $g2->_dbh->selectrow_array(q{
+    SELECT contents_self_loop
+    FROM vertex_property
+    WHERE vertex = ?
+  }, {}, $if2);
+
+}
+
+  $g2->_log->debugf("if1_regular: %s", $if1_regular);
+  $g2->_log->debugf("if2_regular: %s", $if2_regular);
 
   my $automata = Grammar::Graph2::Automata->new(
     base_graph => $g2,
@@ -382,22 +405,11 @@ sub _new_cond {
 
   }) if 1;
 
-  $d->_dbh->sqlite_backup_to_file($if . ".dfa.sqlite");
+#  $d->_dbh->sqlite_backup_to_file($if . ".dfa.sqlite");
 
   $g2->_log->debugf("ACCEPTING: %s", "@accepting");
 
   my %state_to_vertex = $automata->_insert_dfa($d, $start_id);
-
-=pod
-
-$g2->_log->debugf("about to die for %u", $if);
-die if $g2->_dbh->selectrow_array(q{
-
-select vp.vertex, a.vertex, a.shadows, b.shadows from vertex_shadows a inner join vertex_shadows b on (a.vertex = b.vertex) inner join view_vp_plus vp on (vp.p1 = a.shadows and vp.p2 = b.shadows and vp.name = '#exclusion' and vp.is_pop)
-
-}, {});
-
-=cut
 
   $g2->_log->debugf("state_to_vertex: " . Dump \%state_to_vertex);
 
@@ -469,9 +481,6 @@ select vp.vertex, a.vertex, a.shadows, b.shadows from vertex_shadows a inner joi
       $g2->_log->debugf("Removing If2 vertex %u from vertex %u",
         $fi2, $v);
 
-      # FIXME: disabled due to bug
-#      next;
-
       $g2->_dbh->do(q{
         DELETE
         FROM vertex_shadows
@@ -486,19 +495,11 @@ select vp.vertex, a.vertex, a.shadows, b.shadows from vertex_shadows a inner joi
   # If1 structure, the Fi2 vertex does not end up unshadowed.
   $g2->add_shadows($state_to_vertex{ $d->dead_state_id }, $fi2);
 
-=pod
-
-  $g2->_dbh->sqlite_backup_to_file("$if.sqlite");
-
-$g2->_log->debugf("about to die for %u", $if);
-
-die if $g2->_dbh->selectrow_array(q{
-
-select vp.vertex, a.vertex, a.shadows, b.shadows from vertex_shadows a inner join vertex_shadows b on (a.vertex = b.vertex) inner join view_vp_plus vp on (vp.p1 = a.shadows and vp.p2 = b.shadows and vp.name = '#exclusion' and vp.is_pop)
-
-}, {});
-
-=cut
+  # TODO: cover more cases, #exclusion just needs if2 etc.
+  if (not($overlap) and $if1_regular and $if2_regular) {
+    $g2->vp_skippable($_, 1)
+      for $if, $if1, $if2, $fi2, $fi1, $fi;
+  }
 
 }
 

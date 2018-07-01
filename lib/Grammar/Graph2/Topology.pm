@@ -426,7 +426,7 @@ sub BUILD {
   $self->_add_self_loop_attributes();
   $self->_add_stack_groups();
   $self->_add_skippable();
-  $self->_add_representative();
+#  $self->_add_representative();
   $self->_dbh->do(q{ ANALYZE });
 }
 
@@ -794,7 +794,7 @@ sub _add_stack_groups {
     for @stack_groups;
 }
 
-sub _add_skippable {
+sub _add_skippable_old {
   my ($self) = @_;
 
   my @skippable = $self->_dbh->selectall_array(q{
@@ -875,6 +875,99 @@ sub _add_skippable {
     for @skippable;
   
 }
+
+sub _add_skippable {
+  my ($self) = @_;
+
+  my @skippable = $self->_dbh->selectall_array(q{
+    WITH 
+    conditionals AS (
+      SELECT
+        if_p.vertex AS 'If',
+        json_array(
+          if_p.vertex, if_p.p1, if_p.p2,
+          fi_p.vertex, fi_p.p1, fi_p.p2) AS six_tuple
+      FROM
+        view_vp_plus if_p
+          INNER JOIN view_vp_plus fi_p
+            ON (if_p.partner = fi_p.vertex
+              AND if_p.type = 'If')
+    ),
+    base AS (
+      SELECT
+        conditionals.If AS root,
+        each.value AS related
+      FROM
+        conditionals
+          INNER JOIN json_each(conditionals.six_tuple) each
+    )
+/*
+    , if_property AS (
+      SELECT
+        base.root AS root,
+        MIN(MIN(related_p.self_loop, related_p.contents_self_loop)) AS property
+      FROM
+        base
+          INNER JOIN view_vp_plus related_p
+            ON (base.related = related_p.vertex)
+      GROUP BY 
+        base.root
+    ),
+    result AS (
+      SELECT
+        base.related AS vertex,
+        if_property.property AS property
+      FROM
+        if_property
+          INNER JOIN base
+            ON (if_property.root = base.root)
+      UNION
+      SELECT
+        vertex_p.vertex AS vertex,
+        vertex_p.self_loop
+      FROM
+        view_vp_plus vertex_p
+      WHERE
+        NOT(vertex_p.is_conditional)
+    )
+*/
+    SELECT
+      vertex_p.vertex,
+      self_loop = 'no' AS skippable
+    FROM
+      vertex_property vertex_p
+        INNER JOIN view_start_vertex
+        INNER JOIN view_final_vertex
+    WHERE
+      vertex_p.vertex NOT IN (view_start_vertex.vertex,
+        view_final_vertex.vertex)
+      AND
+      vertex_p.vertex NOT IN (SELECT related FROM base)
+    UNION
+    SELECT
+      vertex,
+      0
+    FROM
+      view_start_vertex
+    UNION
+    SELECT
+      vertex,
+      0
+    FROM
+      view_final_vertex
+    UNION
+    SELECT
+      related,
+      0
+    FROM
+      base
+  });
+
+  $self->g->vp_skippable(@$_)
+    for @skippable;
+  
+}
+
 
 sub _add_representative {
   my ($self) = @_;

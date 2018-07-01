@@ -36,7 +36,7 @@ use JSON;
 
 use Test::More;
 
-my ($filter) = @ARGV;
+my (@filter) = @ARGV;
 
 my @dirs = File::Find::Rule
     ->directory()
@@ -45,7 +45,7 @@ my @dirs = File::Find::Rule
 
 for my $dir (sort @dirs) {
 
-  next if defined $filter and index($dir, $filter) < 0;
+  next unless not(@filter) or grep { $dir =~ /\Q$_\E/ } @filter;
 
   my $ts = Grammar::Graph2::TestSeries->new(
     base_path => $dir,
