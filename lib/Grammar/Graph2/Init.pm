@@ -67,7 +67,7 @@ sub _init {
   }
 
   $self->_log->debug('starting _replace_conditionals');
-  $self->_replace_conditionals();
+#  $self->_replace_conditionals();
   $self->_log->debug('done _replace_conditionals');
 
 #  $self->_dbh->sqlite_backup_to_file('post-conditionals.sqlite');
@@ -229,6 +229,8 @@ sub _replace_conditionals {
 
   my $p = $self;
   my $g2 = $self;
+
+  # Maybe this should be computed before mega?
 
   my $db_utils = Grammar::Graph2::DBUtils->new(
     g => $self);
@@ -864,6 +866,10 @@ sub _rename_vertices {
       vertex_name NOT IN (SELECT vertex FROM has_neighbours)
   }) if 1;
 
+=pod 
+
+  # old
+
   $self->_dbh->do(q{
     DROP TABLE IF EXISTS t_rename_vertex;
     CREATE TABLE t_rename_vertex AS
@@ -880,6 +886,27 @@ sub _rename_vertices {
       vertex_p.type,
       vertex_p.name
   });
+
+=cut
+
+  $self->_dbh->do(q{
+    DROP TABLE IF EXISTS t_rename_vertex;
+    CREATE TABLE t_rename_vertex AS
+    SELECT
+      Vertex.vertex_name AS vertex
+    FROM
+      Vertex
+        LEFT JOIN vertex_property vertex_p
+          ON (vertex_p.vertex = Vertex.vertex_name)
+    ORDER BY
+      vertex_p.topo IS NULL ASC,
+      vertex_p.topo,
+      vertex_p.skippable IS NULL ASC,
+      vertex_p.skippable DESC,
+      vertex_p.type,
+      vertex_p.name
+  });
+
 
   $self->_dbh->begin_work();
   
