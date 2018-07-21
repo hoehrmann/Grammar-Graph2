@@ -93,7 +93,9 @@ sub _view_to_table {
 
   die unless defined $view_sql;
 
-  die unless $view_sql =~ s/^\s*CREATE\s+VIEW\s+\S+\s+AS//i;
+  die "Bad view_sql $view_sql"
+    unless
+      $view_sql =~ s/^\s*CREATE\s+VIEW\s+\S+(?:\s*\(.*?\))?\s+AS//i;
 
   # TODO: recursion detection
 

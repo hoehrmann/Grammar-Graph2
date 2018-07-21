@@ -32,9 +32,16 @@ sub _init {
 
   local $dbh->{sqlite_allow_multiple_statements} = 1;
 
+  $self->_log->debug('starting topology');
   Grammar::Graph2::Topology->new(
     g => $self,
   );
+  $self->_log->debug('done topology');
+
+# HACK
+  $self->_dbh->do(q{
+    UPDATE vertex_property SET skippable = 0 WHERE name = 'rule'
+  }) if 0;
 
   my $automata = Grammar::Graph2::Automata->new(
     base_graph => $self,
@@ -51,7 +58,13 @@ sub _init {
     CREATE UNIQUE INDEX idx_old_edge ON old_edge(src,dst);
   });
 
-  $self->_rename_vertices();
+  # TODO: is it really necessary to do renaming here?
+  # We rename later again.
+  if (0) {
+    $self->_log->debug('starting rename_vertices');
+    $self->_rename_vertices();
+    $self->_log->debug('done rename_vertices');
+  }
 
   if (0) {
 
@@ -67,18 +80,19 @@ sub _init {
   }
 
   $self->_log->debug('starting _replace_conditionals');
-#  $self->_replace_conditionals();
+  $self->_replace_conditionals();
   $self->_log->debug('done _replace_conditionals');
 
 #  $self->_dbh->sqlite_backup_to_file('post-conditionals.sqlite');
 
-#  $self->_cover_root();
+  $self->_cover_root();
   $self->_log->debug('done cover root');
 
   $self->_cover_epsilons();
   $self->_log->debug('done cover epsilons');
 
   $self->flatten_shadows();
+  $self->_log->debug('done flatten_shadows');
 
   my $subgraph = _shadowed_subgraph_between($self,
     $self->gp_start_vertex, $self->gp_final_vertex);
@@ -87,12 +101,18 @@ sub _init {
   $self->g->add_edges( $subgraph->edges );
 
   $self->_cover_input_input_edges();
+  $self->_log->debug('done _cover_input_input_edges');
 
   # Note: this is the most recent addition, if odd bugs occur, 
   # comment this out
   $self->_merge_duplicates();
+  $self->_log->debug('done _merge_duplicates');
 
+$self->_dbh->sqlite_backup_to_file('Slow.sqlite');
+
+  $self->_log->debug('starting _rename_vertices');
   $self->_rename_vertices();
+  $self->_log->debug('done _rename_vertices');
 
   $self->_create_vertex_spans();
   $self->_log->debug('done creating spans');
@@ -101,6 +121,7 @@ sub _init {
   $self->_log->debug('done creating input_classes');
 
   $self->_create_utf8();
+  $self->_log->debug('done _create_utf8');
 
   $self->_dbh->do(q{ ANALYZE });
   return;
@@ -838,6 +859,8 @@ sub _rename_vertices {
   # is not called after creating the vertex_span table. 
   # It should not be difficult to make this more generic.
   $self->_dbh->do(q{
+    DROP TABLE IF EXISTS t_has_neighbours;
+    CREATE TABLE t_has_neighbours AS
     WITH RECURSIVE 
     has_neighbours AS (
       SELECT src AS vertex FROM old_edge
@@ -860,10 +883,14 @@ sub _rename_vertices {
             ON (has_neighbours.vertex IN 
               (vertex_p.p1, vertex_p.p2, vertex_p.partner))
     )
+    SELECT * FROM has_neighbours
+    ;
+    CREATE INDEX idx_t_has_neighbours ON t_has_neighbours(vertex)
+    ;
     DELETE FROM
       vertex
     WHERE
-      vertex_name NOT IN (SELECT vertex FROM has_neighbours)
+      vertex_name NOT IN (SELECT vertex FROM t_has_neighbours)
   }) if 1;
 
 =pod 
@@ -905,13 +932,16 @@ sub _rename_vertices {
       vertex_p.skippable DESC,
       vertex_p.type,
       vertex_p.name
+    ;
+    CREATE UNIQUE INDEX idx_t_rename_vertex
+      ON t_rename_vertex(vertex)
+    ;
   });
-
 
   $self->_dbh->begin_work();
   
   $self->_dbh->do(q{
---    PRAGMA defer_foreign_keys = 1;
+    -- PRAGMA defer_foreign_keys = 1;
     UPDATE
       vertex
     SET

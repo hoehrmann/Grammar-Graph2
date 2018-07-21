@@ -121,7 +121,8 @@ sub create_t_cxx {
 
   my $path = $self->input_path;
 #  warn "cxx $path";
-  `/home/bjoern/parselov/alx/alx --in=$path --edges=1 --quads=1 --out=/dev/stdout > /home/bjoern/parselov/cxx.cbor`;
+  `/home/bjoern/parselov/alx/alx --in=$path --edges=1 --quads=1 --grammar=1 --out=/dev/stdout > /home/bjoern/parselov/cxx.cbor`;
+  `cp /home/bjoern/parselov/cxx.cbor $path.cbor`;
   open my $fh, '<', '/home/bjoern/parselov/cxx.cbor';
   my $cbor = do { local $/; <$fh>; };
 
@@ -205,8 +206,8 @@ sub create_t_cxx {
 sub create_t {
   my ($self) = @_;
 
-  $self->create_t_perlsql();
-#  $self->create_t_cxx();
+#  $self->create_t_perlsql();
+  $self->create_t_cxx();
 
   warn "done with cxx";
 

@@ -356,6 +356,8 @@ sub from_grammar_graph {
     g => $g,
   );
 
+  $self->_log->debugf("converting vertices");
+
   for my $v ($old->g->vertices) {
 
     if ($old->g->has_vertex_attribute($v, 'p1')) {
@@ -395,6 +397,8 @@ sub from_grammar_graph {
       $self->vp_type($v, $type);
     }
   }
+
+  $self->_log->debugf("done converting vertices");
 
   $self->gp_start_vertex($old->start_vertex);
   $self->gp_final_vertex($old->final_vertex);

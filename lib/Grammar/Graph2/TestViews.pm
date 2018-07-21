@@ -150,6 +150,47 @@ sub BUILD {
     ;
 
     -----------------------------------------------------------------
+    -- view_parent_child_signature_normalised
+    -----------------------------------------------------------------
+/*
+    DROP VIEW IF EXISTS view_parent_child_signature_normalised;
+    CREATE VIEW view_parent_child_signature_normalised AS
+    WITH RECURSIVE
+    normalised AS (
+      SELECT
+        *
+      FROM
+        view_parent_child_signature
+      UNION
+      SELECT
+
+-- When inner is #anonymous
+--   return inner.inner
+
+
+
+      FROM
+        normalised
+          LEFT JOIN t normalised_t
+            ON (normalised_t.rowid = normalised.id)
+
+    )
+    SELECT
+      *
+    FROM 
+      normalised
+    WHERE
+      COALESCE(parent_start_name, '') NOT LIKE '#%'
+      AND
+      COALESCE(first_child_name, '') NOT LIKE '#%'
+      AND
+      COALESCE(last_child_name, '') NOT LIKE '#%'
+      AND
+      COALESCE(parent_final_name, '') NOT LIKE '#%'
+    ;
+*/
+
+    -----------------------------------------------------------------
     -- view_top_down_reachable
     -----------------------------------------------------------------
 

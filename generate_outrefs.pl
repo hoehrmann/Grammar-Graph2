@@ -34,9 +34,11 @@ use Grammar::Graph2::TestCase;
 local $Storable::canonical = 1;
 
 # my @dirs = <./data/reftests/alxbug>;
-my @dirs = <./data/reftests/greedy-one-or-more-choice*>;
+my @dirs = <./data/reftests/*>;
 
 for my $dir (@dirs) {
+
+  next if $dir =~ /lazy-one-or-more|xml2015-element/;
 
   my @files = File::Find::Rule
     ->file()

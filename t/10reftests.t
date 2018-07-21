@@ -36,6 +36,20 @@ use JSON;
 
 use Test::More;
 
+use Log::Log4perl;
+use Log::Any::Adapter;
+Log::Log4perl::init(\'
+
+log4perl.category = DEBUG, Screen
+log4perl.appender.Screen        = Log::Log4perl::Appender::Screen
+log4perl.appender.Screen.layout = \
+  Log::Log4perl::Layout::PatternLayout
+log4perl.appender.Screen.layout.ConversionPattern = \
+  %d{yyyy-MM-ddTHH:mm:ss.SSS} %-50M %m{indent}%n
+
+');
+Log::Any::Adapter->set('Log4perl');
+
 my (@filter) = @ARGV;
 
 my @dirs = File::Find::Rule
@@ -94,7 +108,10 @@ eval {
     is_deeply $got->{grammar_self_loops},
       $expected->{grammar_self_loops},
       $path_prefix . ' grammar_self_loops' or diag(
-        Dump $got->{grammar_self_loops}
+        Dump {
+          expected => $expected->{grammar_self_loops},
+          got => $got->{grammar_self_loops},
+        }
       );
 
 };

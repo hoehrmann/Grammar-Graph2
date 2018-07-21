@@ -146,7 +146,8 @@ sub BUILD {
         src_p.partner IS NOT NULL
         AND (
           src_p.vertex IN (SELECT parent FROM view_paradoxical)
-          OR src_p.partner IN (SELECT parent FROM view_paradoxical)
+          OR
+          src_p.partner IN (SELECT parent FROM view_paradoxical)
         )
 
       UNION
@@ -165,6 +166,71 @@ sub BUILD {
           INNER JOIN vertex_property as dst_p
             ON (dst_p.vertex = Edge.dst)
           INNER JOIN vertex_property as root_p
+            ON (root_p.vertex = r.root)
+            
+      WHERE
+        1 = 1
+        AND src_p.vertex <> r.root
+        AND src_p.vertex <> root_p.partner
+    )
+    SELECT
+      root AS vertex
+    FROM
+      path
+    WHERE
+      root = dst
+    GROUP BY
+      root,
+      dst
+    HAVING
+      MAX(is_productive) = 1
+
+    ;
+
+    -----------------------------------------------------------------
+    -- view_self_loop_linearity
+    -----------------------------------------------------------------
+
+    DROP VIEW IF EXISTS view_self_loop_linearity;
+    CREATE VIEW view_self_loop_linearity AS
+    WITH RECURSIVE
+    path(root, is_productive, dst) AS (
+      SELECT
+        src_p.vertex AS root,
+        0 AS is_productive,
+        dst_p.vertex AS dst
+      FROM
+        Edge
+          INNER JOIN view_vp_plus as dst_p
+            ON (dst_p.vertex = Edge.dst)
+          INNER JOIN view_vp_plus as src_p
+            ON (src_p.vertex = Edge.src)
+          INNER JOIN view_vp_plus as src_partner_p
+            ON (src_partner_p.vertex = src_p.partner)
+      WHERE
+        src_p.partner IS NOT NULL
+        AND (
+          src_partner_p.self_loop <> 'no'
+          OR
+          src_p.self_loop <> 'no'
+        )
+
+      UNION
+
+      SELECT
+        root_p.vertex AS root,
+        r.is_productive
+          OR src_p.type = 'Input' AS is_productive,
+        dst_p.vertex AS dst
+      FROM
+        path r
+          INNER JOIN Edge
+            ON (Edge.src = r.dst)
+          INNER JOIN view_vp_plus as src_p
+            ON (src_p.vertex = Edge.src)
+          INNER JOIN view_vp_plus as dst_p
+            ON (dst_p.vertex = Edge.dst)
+          INNER JOIN view_vp_plus as root_p
             ON (root_p.vertex = r.root)
             
       WHERE
@@ -423,25 +489,168 @@ sub BUILD {
   });
 
   $self->_add_topological_attributes();
-  $self->_add_self_loop_attributes();
+  $self->_log->debugf("done _add_topological_attributes");
+
+  $self->_add_self_loop_attributes_new();
+  $self->_log->debugf("done _add_self_loop_attributes_new");
+
   $self->_add_stack_groups();
+  $self->_log->debugf("done _add_stack_groups");
+
   $self->_add_skippable();
+  $self->_log->debugf("done _add_skippable");
+
 #  $self->_add_representative();
   $self->_dbh->do(q{ ANALYZE });
 }
 
 local $Storable::canonical = 1;
 
+sub _add_self_loop_attributes_new {
+
+  my ($self) = @_;
+
+  my $dbh = $self->_dbh;
+
+  my $g = Graph::Feather->new(
+    edges => $dbh->selectall_arrayref(q{
+      SELECT * FROM edge
+    }),
+  );
+
+  # TODO: use proper accessors instead
+  my $vp = $dbh->selectall_hashref(q{
+    SELECT * FROM view_vp_plus
+  }, 'vertex');
+
+  for my $v ($g->vertices) {
+    
+    next if $vp->{$v}{is_stack};
+    
+    for my $p ($g->predecessors($v)) {
+      for my $s ($g->successors($v)) {
+        $g->add_edge( $p, $s );
+      }
+    }
+
+    $g->delete_vertex( $v );
+
+  }
+
+  my @todo = $g->edges;
+
+  my %seen;
+
+  while (@todo) {
+
+    my $e = shift @todo;
+
+    next if $seen{ $e->[0] }{ $e->[1] }++;
+
+    if ( $vp->{$e->[0]}{is_push} and $vp->{$e->[0]}{partner} eq $e->[1] ) {
+
+      for my $p ( $g->predecessors($e->[0]) ) {
+        for my $s ( $g->successors($e->[1]) ) {
+          $g->add_edge( $p, $s );
+          push @todo, [ $p, $s ];
+        }
+      }
+
+      $g->delete_edge(@$e);
+
+    }
+
+  }
+
+  for my $e ($g->edges) {
+
+    $g->delete_edge(@$e) unless
+      $vp->{$e->[0]}{is_push} and 
+      $vp->{$e->[1]}{is_pop} and 
+      $vp->{$e->[0]}{partner} ne $e->[1];
+
+  }
+
+  my %self_loop;
+
+  for ($g->edges) {
+    $self_loop{ $_->[0] }++;
+    $self_loop{ $_->[1] }++;
+    $self_loop{ $vp->{ $_->[0] }{ partner } }++;
+    $self_loop{ $vp->{ $_->[1] }{ partner } }++;
+  }
+
+  $self->g->vp_self_loop($_, 'irregular') for keys %self_loop;
+
+$self->_dbh->sqlite_backup_to_file('linearity.sqlite');
+
+  my @prod = map { @$_ } $self->_dbh->selectall_array(q{
+    SELECT vertex FROM view_self_loop_linearity
+  });
+
+  my %in_prod = map { $_ => 1 } @prod;
+
+#use YAML::XS;
+#warn Dump { in_prod => \%in_prod };
+
+  for my $v (keys %self_loop) {
+    if ( $in_prod{ $v } and $in_prod{ $self->g->vp_partner($v) } ) {
+      next;
+    }
+    $self->g->vp_self_loop($v, 'linear');
+  }
+
+#  $self->g->vp_self_loop($_, 'linear')
+#    for grep { not $in_prod{$_} } keys %self_loop;
+
+  my @contents_self_loop = $self->_dbh->selectall_array(q{
+    SELECT vertex, self_loop
+    FROM view_contents_self_loop
+  });
+
+  $self->g->vp_contents_self_loop(@$_)
+    for @contents_self_loop;
+
+  for ($g->edges) {
+
+    $self->_log->debugf('self_loop: %s',
+
+      join " ", map {
+        $_,
+        $vp->{$_}{type},
+        $vp->{$_}{name},
+        $vp->{$_}{partner} // '_'
+      } @$_
+
+    );
+
+  }
+
+#  use YAML::XS;
+#  say Dump \%self_loop;
+
+}
+
+
 sub _add_self_loop_attributes {
   my ($self) = @_;
 
+  my $db_utils = Grammar::Graph2::DBUtils->new(
+    g => $self);
+
+  $db_utils->views_to_tables(
+    'view_self_loop',
+  );
+
   my @self_loop = $self->_dbh->selectall_array(q{
     SELECT vertex, self_loop
-    FROM view_self_loop
+    FROM m_view_self_loop
   });
 
   $self->g->vp_self_loop(@$_)
     for @self_loop;
+
+  $self->_log->debugf("done with m_view_self_loop");
 
   # Workaround for reftests/alxbug
   $self->_dbh->do(q{
@@ -457,6 +666,8 @@ sub _add_self_loop_attributes {
       name IS NOT NULL
   }) if 1;
 
+  # The above is incomplete :(
+
   my @contents_self_loop = $self->_dbh->selectall_array(q{
     SELECT vertex, self_loop
     FROM view_contents_self_loop
@@ -464,6 +675,21 @@ sub _add_self_loop_attributes {
 
   $self->g->vp_contents_self_loop(@$_)
     for @contents_self_loop;
+
+  # Workaround
+  $self->_dbh->do(q{
+    UPDATE
+      vertex_property
+    SET
+      self_loop = (
+        SELECT MIN(vertex_p.self_loop, MIN(vertex_p.contents_self_loop))
+        FROM vertex_property vertex_p
+        WHERE vertex_p.name = vertex_property.name
+      )
+    WHERE
+      name IS NOT NULL
+  }) if 0;
+
 }
 
 sub _strongly_connected_graph_feather {
@@ -618,8 +844,11 @@ sub _add_topological_attributes {
     ->ascii(1)
     ->indent(0);
 
+  $self->_log->debugf("done _topo_epsilon");
   my $t1 = $self->_topo_epsilon();
+
   my $t2 = $self->_topo_parent_child();
+  $self->_log->debugf("done _topo_parent_child");
 
   # FIXME: something to do with unreachable vertices?
 
