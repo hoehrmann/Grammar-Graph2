@@ -355,11 +355,98 @@
          [
             [
                "element",
+               [],
+               1,
+               30
+            ]
+         ],
+         1,
+         30
+      ],
+      [
+         "",
+         [
+            [
+               "element",
                [
                   [
-                     "content",
-                     [],
+                     "#exclusion",
+                     [
+                        [
+                           "#exclusion",
+                           [],
+                           4,
+                           4
+                        ]
+                     ],
                      4,
+                     4
+                  ]
+               ],
+               1,
+               30
+            ]
+         ],
+         1,
+         30
+      ],
+      [
+         "",
+         [
+            [
+               "element",
+               [
+                  [
+                     "#exclusion",
+                     [
+                        [
+                           "#exclusion",
+                           [],
+                           26,
+                           26
+                        ]
+                     ],
+                     26,
+                     26
+                  ]
+               ],
+               1,
+               30
+            ]
+         ],
+         1,
+         30
+      ],
+      [
+         "",
+         [
+            [
+               "element",
+               [
+                  [
+                     "#exclusion",
+                     [
+                        [
+                           "#exclusion",
+                           [],
+                           4,
+                           4
+                        ]
+                     ],
+                     4,
+                     4
+                  ],
+                  [
+                     "#exclusion",
+                     [
+                        [
+                           "#exclusion",
+                           [],
+                           26,
+                           26
+                        ]
+                     ],
+                     26,
                      26
                   ]
                ],
@@ -482,7 +569,7 @@
       ],
       [
          "content",
-         "irregular"
+         "no"
       ],
       [
          "element",
@@ -503,22 +590,82 @@
       [
          1,
          "element",
+         null,
+         null,
+         null,
+         null,
+         30,
+         "element"
+      ],
+      [
+         1,
+         "element",
          4,
-         "content",
+         "#exclusion",
+         4,
+         "#exclusion",
+         30,
+         "element"
+      ],
+      [
+         1,
+         "element",
+         4,
+         "#exclusion",
          26,
-         "content",
+         "#exclusion",
+         30,
+         "element"
+      ],
+      [
+         1,
+         "element",
+         26,
+         "#exclusion",
+         26,
+         "#exclusion",
          30,
          "element"
       ],
       [
          4,
-         "content",
+         "#exclusion",
+         null,
+         null,
+         null,
+         null,
+         4,
+         "#exclusion"
+      ],
+      [
+         4,
+         "#exclusion",
+         4,
+         "#exclusion",
+         4,
+         "#exclusion",
+         4,
+         "#exclusion"
+      ],
+      [
+         26,
+         "#exclusion",
          null,
          null,
          null,
          null,
          26,
-         "content"
+         "#exclusion"
+      ],
+      [
+         26,
+         "#exclusion",
+         26,
+         "#exclusion",
+         26,
+         "#exclusion",
+         26,
+         "#exclusion"
       ]
    ],
    "random_matches":[
@@ -604,5 +751,12 @@
          30
       ]
    ],
-   "sibling_signature":[]
+   "sibling_signature":[
+      [
+         4,
+         "#exclusion",
+         26,
+         "#exclusion"
+      ]
+   ]
 }

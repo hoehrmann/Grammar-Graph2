@@ -509,9 +509,149 @@
                "element",
                [
                   [
-                     "content",
-                     [],
+                     "#exclusion",
+                     [
+                        [
+                           "#exclusion",
+                           [],
+                           13,
+                           16
+                        ]
+                     ],
+                     13,
+                     16
+                  ]
+               ],
+               1,
+               23
+            ]
+         ],
+         1,
+         23
+      ],
+      [
+         "",
+         [
+            [
+               "element",
+               [
+                  [
+                     "#exclusion",
+                     [
+                        [
+                           "#exclusion",
+                           [],
+                           4,
+                           4
+                        ]
+                     ],
                      4,
+                     4
+                  ],
+                  [
+                     "#exclusion",
+                     [
+                        [
+                           "#exclusion",
+                           [],
+                           13,
+                           16
+                        ]
+                     ],
+                     13,
+                     16
+                  ]
+               ],
+               1,
+               23
+            ]
+         ],
+         1,
+         23
+      ],
+      [
+         "",
+         [
+            [
+               "element",
+               [
+                  [
+                     "#exclusion",
+                     [
+                        [
+                           "#exclusion",
+                           [],
+                           13,
+                           16
+                        ]
+                     ],
+                     13,
+                     16
+                  ],
+                  [
+                     "#exclusion",
+                     [
+                        [
+                           "#exclusion",
+                           [],
+                           19,
+                           19
+                        ]
+                     ],
+                     19,
+                     19
+                  ]
+               ],
+               1,
+               23
+            ]
+         ],
+         1,
+         23
+      ],
+      [
+         "",
+         [
+            [
+               "element",
+               [
+                  [
+                     "#exclusion",
+                     [
+                        [
+                           "#exclusion",
+                           [],
+                           4,
+                           4
+                        ]
+                     ],
+                     4,
+                     4
+                  ],
+                  [
+                     "#exclusion",
+                     [
+                        [
+                           "#exclusion",
+                           [],
+                           13,
+                           16
+                        ]
+                     ],
+                     13,
+                     16
+                  ],
+                  [
+                     "#exclusion",
+                     [
+                        [
+                           "#exclusion",
+                           [],
+                           19,
+                           19
+                        ]
+                     ],
+                     19,
                      19
                   ]
                ],
@@ -634,7 +774,7 @@
       ],
       [
          "content",
-         "irregular"
+         "no"
       ],
       [
          "element",
@@ -656,21 +796,101 @@
          1,
          "element",
          4,
-         "content",
+         "#exclusion",
+         16,
+         "#exclusion",
+         23,
+         "element"
+      ],
+      [
+         1,
+         "element",
+         4,
+         "#exclusion",
          19,
-         "content",
+         "#exclusion",
+         23,
+         "element"
+      ],
+      [
+         1,
+         "element",
+         13,
+         "#exclusion",
+         16,
+         "#exclusion",
+         23,
+         "element"
+      ],
+      [
+         1,
+         "element",
+         13,
+         "#exclusion",
+         19,
+         "#exclusion",
          23,
          "element"
       ],
       [
          4,
-         "content",
+         "#exclusion",
+         null,
+         null,
+         null,
+         null,
+         4,
+         "#exclusion"
+      ],
+      [
+         4,
+         "#exclusion",
+         4,
+         "#exclusion",
+         4,
+         "#exclusion",
+         4,
+         "#exclusion"
+      ],
+      [
+         13,
+         "#exclusion",
+         null,
+         null,
+         null,
+         null,
+         16,
+         "#exclusion"
+      ],
+      [
+         13,
+         "#exclusion",
+         13,
+         "#exclusion",
+         16,
+         "#exclusion",
+         16,
+         "#exclusion"
+      ],
+      [
+         19,
+         "#exclusion",
          null,
          null,
          null,
          null,
          19,
-         "content"
+         "#exclusion"
+      ],
+      [
+         19,
+         "#exclusion",
+         19,
+         "#exclusion",
+         19,
+         "#exclusion",
+         19,
+         "#exclusion"
       ]
    ],
    "random_matches":[
@@ -794,5 +1014,18 @@
          23
       ]
    ],
-   "sibling_signature":[]
+   "sibling_signature":[
+      [
+         4,
+         "#exclusion",
+         13,
+         "#exclusion"
+      ],
+      [
+         16,
+         "#exclusion",
+         19,
+         "#exclusion"
+      ]
+   ]
 }
