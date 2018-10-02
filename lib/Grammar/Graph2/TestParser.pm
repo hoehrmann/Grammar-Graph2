@@ -120,15 +120,18 @@ sub create_t_cxx {
   $self->_file_to_table();
 
   my $path = $self->input_path;
-#  warn "cxx $path";
-  `/home/bjoern/parselov/alx/alx --in=$path --edges=1 --graph=1 --quads=1 --grammar=1 --out=/dev/stdout > /home/bjoern/parselov/cxx.cbor`;
-  `cp /home/bjoern/parselov/cxx.cbor $path.cbor`;
-  open my $fh, '<', '/home/bjoern/parselov/cxx.cbor';
-  my $cbor = do { local $/; <$fh>; };
 
-  my $json = JSON->new->encode(
-    CBOR::XS->new->decode($cbor)
-  );
+#  warn "cxx $path";
+  unlink '/dev/shm/testparser.sqlite';
+  `/home/bjoern/parselov/alx/alx --in=$path --all-edges --out-db=/dev/shm/testparser.sqlite`;
+#  `cp /home/bjoern/parselov/cxx.cbor $path.cbor`;
+#   open my $fh, '<', '/home/bjoern/parselov/cxx.cbor';
+#   my $cbor = do { local $/; <$fh>; };
+# 
+#   my $json = JSON->new->encode(
+#     CBOR::XS->new->decode($cbor)
+#   );
+# 
 
   local $self->_dbh->{sqlite_allow_multiple_statements} = 1;
   $self->_dbh->do(q{
@@ -137,66 +140,118 @@ sub create_t_cxx {
     DROP TABLE IF EXISTS testparser_all_edges_shadowed;
   });
 
+  $self->_log->debugf('attaching alx db');
   $self->_dbh->do(q{
-    CREATE TABLE result AS 
-    SELECT
-      json_extract(each.value, '$[0]') AS src_pos,
-      CAST(json_extract(each.value, '$[1]') AS TEXT) AS src_vertex,
-      json_extract(each.value, '$[2]') AS dst_pos,
-      CAST(json_extract(each.value, '$[3]') AS TEXT) AS dst_vertex
-    FROM
-      json_each(json_extract(?, '$.edges')) each
-/*
-    UNION
-    SELECT
-      1,
-      view_start_vertex.vertex,
-      1,
-      old_edge.dst
-    FROM
-      view_start_vertex
-        INNER JOIN old_edge
-          ON (old_edge.src = view_start_vertex.vertex)
-*/
-    ;
-    CREATE TABLE testparser_all_edges AS
-    SELECT * FROM result;
-    CREATE TABLE testparser_all_edges_shadowed AS
-    SELECT * FROM result;
-  }, {}, $json);
+    ATTACH DATABASE ? AS alx;
+  }, {}, '/dev/shm/testparser.sqlite');
 
   $self->_create_t_empty();
 
   $self->_dbh->do(q{
-    WITH base AS (
-      SELECT
-        json_extract(each.value, '$[0]') AS src_pos,
-        CAST(json_extract(each.value, '$[1]') AS TEXT) AS src_vertex,
+    INSERT OR IGNORE INTO t 
+    SELECT
+      src_node.pos AS src_pos,
+      CAST(src_node.vertex AS TEXT) AS src_vertex,
+      mid_src_node.pos AS mid_src_pos,
+      CAST(mid_src_node.vertex AS TEXT) AS mid_src_vertex,
+      mid_dst_node.pos AS mid_dst_pos,
+      CAST(mid_dst_node.vertex AS TEXT) AS mid_dst_vertex,
+      dst_node.pos AS dst_pos,
+      CAST(dst_node.vertex AS TEXT) AS dst_vertex
+    FROM
+      alx.graph_quads q
+        LEFT JOIN alx.graph_nodes src_node
+          ON (q.src_id = src_node.node_id)
+        LEFT JOIN alx.graph_nodes mid_src_node
+          ON (q.mid_src_id = mid_src_node.node_id)
+        LEFT JOIN alx.graph_nodes mid_dst_node
+          ON (q.mid_dst_id = mid_dst_node.node_id)
+        LEFT JOIN alx.graph_nodes dst_node
+          ON (q.dst_id = dst_node.node_id)
+  });
 
-        json_extract(each.value, '$[2]') AS mid_src_pos,
-        CAST(json_extract(each.value, '$[3]') AS TEXT) AS mid_src_vertex,
-        json_extract(each.value, '$[4]') AS mid_dst_pos,
-        CAST(json_extract(each.value, '$[5]') AS TEXT) AS mid_dst_vertex,
-
-        json_extract(each.value, '$[6]') AS dst_pos,
-        CAST(json_extract(each.value, '$[7]') AS TEXT) AS dst_vertex
-      FROM
-        json_each(json_extract(?, '$.graph')) each
-      /* TODO: missing WHERE clause to prevent false start -> final_but_not_partner edges */
-    )
-    INSERT OR IGNORE INTO t
+  $self->_dbh->do(q{
+    CREATE TABLE result AS
     SELECT
       src_pos,
-      src_vertex,
-      NULLIF(mid_src_pos, 0),
-      NULLIF(mid_src_vertex, '0'),
-      NULLIF(mid_dst_pos, 0),
-      NULLIF(mid_dst_vertex, '0'),
+      CAST(src_vertex AS TEXT) AS src_vertex,
       dst_pos,
-      dst_vertex
+      CAST(dst_vertex AS TEXT) AS dst_vertex
     FROM
-      base
-  }, {}, $json);
+      alx.planar_edges
+  });
+
+  $self->_dbh->do(q{
+    CREATE TABLE testparser_all_edges AS
+    SELECT * FROM result;
+    CREATE TABLE testparser_all_edges_shadowed AS
+    SELECT * FROM result;
+
+    DETACH DATABASE 'alx'
+  });
+
+  # edges to result
+  # 
+
+#   $self->_dbh->do(q{
+#     CREATE TABLE result AS 
+#     SELECT
+#       json_extract(each.value, '$[0]') AS src_pos,
+#       CAST(json_extract(each.value, '$[1]') AS TEXT) AS src_vertex,
+#       json_extract(each.value, '$[2]') AS dst_pos,
+#       CAST(json_extract(each.value, '$[3]') AS TEXT) AS dst_vertex
+#     FROM
+#       json_each(json_extract(?, '$.edges')) each
+# /*
+#     UNION
+#     SELECT
+#       1,
+#       view_start_vertex.vertex,
+#       1,
+#       old_edge.dst
+#     FROM
+#       view_start_vertex
+#         INNER JOIN old_edge
+#           ON (old_edge.src = view_start_vertex.vertex)
+# */
+#     ;
+#     CREATE TABLE testparser_all_edges AS
+#     SELECT * FROM result;
+#     CREATE TABLE testparser_all_edges_shadowed AS
+#     SELECT * FROM result;
+#   }, {}, $json);
+
+
+#   $self->_dbh->do(q{
+#     WITH base AS (
+#       SELECT
+#         json_extract(each.value, '$[0]') AS src_pos,
+#         CAST(json_extract(each.value, '$[1]') AS TEXT) AS src_vertex,
+# 
+#         json_extract(each.value, '$[2]') AS mid_src_pos,
+#         CAST(json_extract(each.value, '$[3]') AS TEXT) AS mid_src_vertex,
+#         json_extract(each.value, '$[4]') AS mid_dst_pos,
+#         CAST(json_extract(each.value, '$[5]') AS TEXT) AS mid_dst_vertex,
+# 
+#         json_extract(each.value, '$[6]') AS dst_pos,
+#         CAST(json_extract(each.value, '$[7]') AS TEXT) AS dst_vertex
+#       FROM
+#         json_each(json_extract(?, '$.graph')) each
+#       /* TODO: missing WHERE clause to prevent false start -> final_but_not_partner edges */
+#     )
+#     INSERT OR IGNORE INTO t
+#     SELECT
+#       src_pos,
+#       src_vertex,
+#       NULLIF(mid_src_pos, 0),
+#       NULLIF(mid_src_vertex, '0'),
+#       NULLIF(mid_dst_pos, 0),
+#       NULLIF(mid_dst_vertex, '0'),
+#       dst_pos,
+#       dst_vertex
+#     FROM
+#       base
+#   }, {}, $json);
 
 #  $self->_dbh->sqlite_backup_to_file('BUG.sqlite');
 
