@@ -112,6 +112,9 @@ sub _view_to_table {
 
   $self->g->_dbh->do(qq{
     CREATE TABLE IF NOT EXISTS $quoted_table_name AS
+    
+    -- The following is probably very slow since SQLite does
+    -- not seem to optimise computing rows away 
     SELECT * FROM $quoted_view_name LIMIT 0;
 
     DELETE FROM $quoted_table_name;

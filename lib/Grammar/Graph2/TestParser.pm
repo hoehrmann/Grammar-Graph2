@@ -123,7 +123,7 @@ sub create_t_cxx {
 
 #  warn "cxx $path";
   unlink '/dev/shm/testparser.sqlite';
-  `/home/bjoern/parselov/alx/alx --in=$path --all-edges --out-db=/dev/shm/testparser.sqlite`;
+  `/home/bjoern/parselov/alx/build/src/alx --in=$path --all-edges --db=/dev/shm/testparser.sqlite`;
 #  `cp /home/bjoern/parselov/cxx.cbor $path.cbor`;
 #   open my $fh, '<', '/home/bjoern/parselov/cxx.cbor';
 #   my $cbor = do { local $/; <$fh>; };
@@ -173,12 +173,16 @@ sub create_t_cxx {
   $self->_dbh->do(q{
     CREATE TABLE result AS
     SELECT
-      src_pos,
-      CAST(src_vertex AS TEXT) AS src_vertex,
-      dst_pos,
-      CAST(dst_vertex AS TEXT) AS dst_vertex
+      src_idx.pos AS src_pos,
+      CAST(src_idx.vertex AS TEXT) AS src_vertex,
+      dst_idx.pos AS dst_pos,
+      CAST(dst_idx.vertex AS TEXT) AS dst_vertex
     FROM
-      alx.planar_edges
+      alx.all_edges_edges e
+        INNER JOIN alx.all_edges_index src_idx
+          ON (src_idx.node_id = e.src_id)
+        INNER JOIN alx.all_edges_index dst_idx
+          ON (dst_idx.node_id = e.dst_id)
   });
 
   $self->_dbh->do(q{

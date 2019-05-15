@@ -270,227 +270,383 @@ sub _insert_dfa {
 
   my $guid = sprintf '%08x', int(rand( 2**31 ));
 
-#  $d->_dbh->sqlite_backup_to_file($guid . '.sqlite');
+  $self->base_graph->_dbh->sqlite_backup_to_file(
+    $guid . '-before.sqlite'
+  );
 
-  $self->_log->debugf('Inserting DFA, guid %s', $guid);
-
-  my ($base_id) = $self->base_graph->g->{dbh}->selectrow_array(q{
+  my ($base_id) = $self->base_graph->_dbh->selectrow_array(q{
     SELECT 1 + MAX(0 + vertex_name) FROM Vertex;
   });
 
-  $d->_dbh->do(q{
-    DROP TABLE IF EXISTS TConfiguration;
-  });
-  $d->_dbh->do(q{
-    CREATE TABLE TConfiguration AS
-      SELECT * FROM Configuration ORDER BY vertex;
-  });
-  $d->_dbh->do(q{
-    CREATE INDEX idx_tconfiguration_vertex ON TConfiguration(vertex);
-  });
-
-  # Each state and all (group of) transitions are mapped to new
-  # vertices in the grammar graph. Starting from a $base_id new
-  # vertices are assigned a computed number. States are mapped
-  # directly to their state_id, transitions come directly after
-  # based on their rowid.
-
-  my $tr_sth = $d->_dbh->prepare(q{
-    SELECT
-      (SELECT MAX(state_id) FROM state) + tr.rowid AS via,
-      tr.src AS src_state,
-      json_group_array(m.input) AS first_ords,
-      json_group_array(m.vertex) AS vertices,
-      tr.dst AS dst_state
-    FROM
-      Transition tr
-        INNER JOIN TConfiguration src_cfg
-          ON (tr.src = src_cfg.state)
---        INNER JOIN TConfiguration dst_cfg
---          ON (tr.dst = dst_cfg.state)
---        INNER JOIN Edge e
---          ON (e.src = src_cfg.vertex AND e.dst = dst_cfg.vertex)
-        INNER JOIN Match m
-          ON (m.input = tr.input AND m.vertex = src_cfg.vertex)
-    GROUP BY
-      tr.src,
-      tr.input,
-      tr.dst
-  });
-
-  # GROUP BY tr.src, tr.input, tr.dst -> too many vertices
-  # GROUP BY tr.src, tr.dst -> shadowed vertices might not match
-  # TODO: There is a middle ground...
-
-  $tr_sth->execute();
-
-  my %cache;
-  while (my $row = $tr_sth->fetchrow_arrayref) {
-    my ($via, $src, $first_ords, $vertices, $dst) = @$row;
-
-    $self->_log->debugf('#dfaTransition: %s', join ' ',
-      $base_id + $via, $base_id + $src, $vertices, $base_id + $dst );
-
-    $vertices = $self->_json->decode( $vertices );
-    $first_ords = $self->_json->decode( $first_ords );
-
-    $self->base_graph->g->add_edges(
-      [ $base_id + $src, $base_id + $via ],
-      [ $base_id + $via, $base_id + $dst ],
-    );
-
-    $self->base_graph->vp_type($base_id + $via, 'Input');
-    $self->base_graph->vp_name($base_id + $via, "#dfaTransition:$guid");
-    $self->base_graph->vp_shadow_group($base_id + $via, "$base_id");
-    $self->base_graph->add_shadows($base_id + $via,
-      @$vertices);
-
-    my @run_lists = uniq(map {
-      $self->alphabet->_ord_to_list()->{$_}
-    } uniq( @$first_ords ));
-
-    my $encoded = $self->_json->encode(\@run_lists);
-    $cache{ $encoded } //= Set::IntSpan->new(@run_lists);
-    my $combined = $cache{ $encoded };
-
-    $self->base_graph->vp_run_list($base_id + $via, $combined);
-  }
-
-  my $st_sth = $d->_dbh->prepare(q{
-    WITH base AS (
-      SELECT
-        c1.state AS state,
-        json_group_array(c1.vertex) AS vertices
-      FROM
-        Configuration c1
-          INNER JOIN Vertex vertex_p
-            ON (c1.vertex = vertex_p.value
-              AND vertex_p.is_nullable
-              )
-      GROUP BY
-        c1.state
-    )
-    SELECT
-      s.state_id,
-      base.vertices
-    FROM
-      State s
-        LEFT JOIN base
-          ON (base.state = s.state_id)
-  });
-
-  $st_sth->execute();
-
-  while (my $row = $st_sth->fetchrow_arrayref) {
-    my ($state_id, $shadowed) = @$row;
-    $shadowed //= '[]';
-
-    $self->_log->debugf("creating dfa state %u vertex %u shadowing %s",
-      $state_id, $base_id + $state_id, $shadowed);
-
-    $self->base_graph->vp_type($base_id + $state_id, 'empty');
-    $self->base_graph->vp_name($base_id + $state_id, "#dfaState:$state_id:$guid");
-    $self->base_graph->vp_shadow_group($base_id + $state_id, "$base_id");
-
-#die "TRYING TO SHADOW INPUT VERTEX"
-# if grep { $self->base_graph->is_input_vertex($_) }
-#   @{ $self->_json->decode($shadowed) };
-
-    $self->base_graph->add_shadows($base_id + $state_id,
-        @{ $self->_json->decode($shadowed) });
-
-  }
-
-  my @unreachable = map { @$_ } $d->_dbh->selectall_array(q{
-    SELECT
-      value
-    FROM
-      Vertex
-    WHERE
-      1 OR Vertex.is_nullable
-    EXCEPT
-    SELECT
-      vertex
-    FROM
-      TConfiguration
-  });
-
-  $self->_log->debugf("%s", Dump { unreachable => \@unreachable });
-
-  $self->base_graph->add_shadows($base_id + $d->dead_state_id,
-    @unreachable);
-
-  my ($max_state) = $d->_dbh->selectrow_array(q{
-    SELECT MAX(state_id) FROM State;
-  });
-
-  my %state_to_vertex = map {
-    $_ => $base_id + $_
-  } 1 .. $max_state;
-
-  $self->base_graph->_dbh->do(q{
-    DROP TABLE IF EXISTS t_connection;
-  });
-
-  $self->base_graph->_dbh->do(q{
-    DROP TABLE IF EXISTS t_start_vertices;
-  });
-
-  $self->base_graph->_dbh->do(q{
-    CREATE TABLE t_start_vertices AS
-    SELECT
-      CAST(each.value AS TEXT) AS vertex
-    FROM
-      json_each(?) each
-  }, {}, $self->_json->encode([ map { $state_to_vertex{$_} } @start_ids ]));
-
-  my $db_utils = Grammar::Graph2::DBUtils->new(
-    g => $self->base_graph);
-
-  $db_utils->views_to_tables(
-    'view_shadow_connections_in',
-    'view_shadow_connections_out',
+  my @args = (
+    $base_id,
+    $self->base_graph->gp_start_vertex,
+    $self->base_graph->gp_final_vertex,
   );
 
-  $self->base_graph->_dbh->do(q{
-    CREATE TABLE t_connection AS
-    SELECT
-      m_view_shadow_connections_in.*
-    FROM
-      m_view_shadow_connections_in
-        INNER JOIN t_start_vertices
-          ON (out_dst = t_start_vertices.vertex)
-    UNION
-    SELECT
-      *
-    FROM
-      m_view_shadow_connections_out
+  $self->_log->debug("new style transplantation");
+
+  $d->{_dbh}->sqlite_create_function('fo2str', 1, sub {
+    my ($list) = @_;
+    my @ords = split/,/, $list;
+    my @lists = map { $self->alphabet->_ord_to_list()->{$_} } @ords;
+    my $span = Set::IntSpan->new(@lists);
+    # $self->_log->debugf("%s turned into %s", "@lists", "$span");
+    return $span->run_list;
   });
 
-  $self->base_graph->_dbh->do(q{
-    DELETE FROM Edge
-    WHERE
-      EXISTS (SELECT 1
-              FROM t_connection
---                INNER JOIN vertex_property src_p ON (src_p.vertex = t_connection.in_src)
---                INNER JOIN vertex_property dst_p ON (dst_p.vertex = t_connection.in_dst)
-              WHERE
-                in_src = Edge.src
-                AND
-                in_dst = Edge.dst)
-  }) if 1;
+  my ($data) = $d->{_dbh}->selectrow_array(q{
+    WITH
 
-  # 
+    -----------------------------------------------------------------
+    -- NOTE: This query makes several assumptions:
+    -- 
+    --   * All edges in the automaton are reachable from the starts
+    --   * The start vertices are never terminal vertices
+    --   * There are no terminal->terminal edges
+    --
+    -- TODO: verify these assumptions
+    -----------------------------------------------------------------
+
+    -----------------------------------------------------------------
+    -- Input arguments used throughout this CTE.
+    -----------------------------------------------------------------
+    args AS (
+      SELECT
+        CAST(? AS INT) AS base,
+        CAST(? AS INT) AS start_vertex,
+        CAST(? AS INT) AS final_vertex
+    ),
+    -----------------------------------------------------------------
+    -- New vertices representing DFA states
+    -----------------------------------------------------------------
+    vertex_for_state AS (
+      SELECT
+        'empty' AS type,
+        '#dfaState' AS name,
+        NULL AS run_list,
+        NULL AS shadow_group,
+        JSON_GROUP_ARRAY(DISTINCT vertex) AS shadows,
+        state AS state_id,
+        NULL as trans_id,
+        NULL AS src,
+        NULL AS dst
+      FROM
+        Configuration
+      GROUP BY
+        state
+    ),
+    -----------------------------------------------------------------
+    -- New vertices representing transitions
+    -----------------------------------------------------------------
+    vertex_for_trans AS (
+      SELECT
+        'Input' AS type,
+        '#dfaTransition' AS name,
+        fo2str(GROUP_CONCAT(DISTINCT tr.input)) AS run_list,
+        NULL as shadow_group,
+        JSON_GROUP_ARRAY(DISTINCT m.vertex) as shadows,
+        NULL as state_id,
+        MIN(tr.rowid) AS trans_id,
+        src,
+        dst
+      FROM
+        Transition tr
+          INNER JOIN Configuration src_cfg
+            ON (tr.src = src_cfg.state)
+          INNER JOIN Match m
+            ON (m.input = tr.input AND m.vertex = src_cfg.vertex)
+      GROUP BY
+        tr.src,
+        tr.dst
+    ),
+    -----------------------------------------------------------------
+    -- Unreachable vertices
+    -----------------------------------------------------------------
+    unreachable AS (
+      SELECT
+        value AS vertex
+      FROM
+        Vertex
+      EXCEPT
+      SELECT
+        vertex
+      FROM
+        Configuration
+    ),
+    -----------------------------------------------------------------
+    -- Vertex from dead state
+    -----------------------------------------------------------------
+    vertex_for_dead_state AS (
+      SELECT
+        'empty' AS type,
+        '#dfaDead' AS name,
+        NULL AS run_list,
+        NULL AS shadow_group,
+        JSON_GROUP_ARRAY(unreachable.vertex) AS shadows,
+        state_id AS state_id,
+        NULL as trans_id,
+        NULL AS src,
+        NULL AS dst
+      FROM
+        State
+          LEFT JOIN unreachable
+      WHERE
+        State.state_id = 1
+      GROUP BY
+        State.state_id
+    ),
+    -----------------------------------------------------------------
+    -- All new vertices combined
+    -----------------------------------------------------------------
+    new_vertices_numberless AS (
+      SELECT * FROM vertex_for_state
+      UNION
+      SELECT * FROM vertex_for_trans
+      UNION
+      SELECT * FROM vertex_for_dead_state
+    ),
+    -----------------------------------------------------------------
+    -- Add vertex id for each new vertex based on MAX(existing)
+    -----------------------------------------------------------------
+    new_vertices AS (
+      SELECT
+        row_number() OVER(ORDER BY state_id, trans_id) + args.base AS id,
+        new_vertices_numberless.*
+      FROM
+        new_vertices_numberless
+          INNER JOIN args
+    ),
+    -----------------------------------------------------------------
+    -- Resolve `src` and `dst` with newly determined vertex numbers
+    -----------------------------------------------------------------
+    new_interior_triples AS (
+      SELECT
+        src_v.id AS src_id,
+        vt.id AS via_id,
+        dst_v.id AS dst_id
+      FROM
+        new_vertices vt
+          INNER JOIN new_vertices src_v
+            ON (src_v.state_id = vt.src)
+          INNER JOIN new_vertices dst_v
+            ON (dst_v.state_id = vt.dst)
+    ),
+    -----------------------------------------------------------------
+    -- Convert transition triples to edges (vertex pairs)
+    -----------------------------------------------------------------
+    new_interior_edges AS (
+      SELECT src_id AS src, via_id AS dst FROM new_interior_triples
+      UNION
+      SELECT via_id AS src, dst_id AS dst FROM new_interior_triples
+    ),
+    -----------------------------------------------------------------
+    -- Unpack the `shadows` property for later insertion
+    -----------------------------------------------------------------
+    new_shadowings AS (
+      SELECT
+        new_vertices.id AS vertex,
+        each.value AS shadows
+      FROM
+        new_vertices
+          INNER JOIN JSON_EACH(new_vertices.shadows) each
+          INNER JOIN args
+      WHERE
+        CAST(each.value AS TEXT) NOT IN (
+          args.start_vertex, args.final_vertex
+        )
+    ),
+    -----------------------------------------------------------------
+    -- Edges covered by automata can be removed unless they are edges
+    -- leaving the `start_vertex` or arriving at the `final_vertex`.
+    -- 
+    -- NOTE: this assumes the automata have been computed so that all
+    -- edges can actually be reached from the start vertex sets.
+    -----------------------------------------------------------------
+    obsolete_edges AS (
+      SELECT
+        src,
+        dst
+      FROM
+        Edge
+          INNER JOIN args
+      WHERE
+        src <> args.start_vertex
+        AND
+        dst <> args.final_vertex
+    ),
+    -----------------------------------------------------------------
+    -- JSON encoding
+    -----------------------------------------------------------------
+    json_obsolete_edges AS (
+      SELECT
+        JSON_GROUP_ARRAY(JSON_ARRAY(src, dst)) AS data
+      FROM
+        obsolete_edges
+      GROUP BY
+        NULL
+    ),
+    json_new_shadowings AS (
+      SELECT
+        JSON_GROUP_ARRAY(JSON_ARRAY(vertex, shadows)) AS data
+      FROM
+        new_shadowings
+      GROUP BY
+        NULL
+    ),
+    json_new_interior_edges AS (
+      SELECT
+        JSON_GROUP_ARRAY(JSON_ARRAY(src, dst)) AS data
+      FROM
+        new_interior_edges
+      GROUP BY
+        NULL
+    ),
+    json_new_vertices AS (
+      SELECT
+        JSON_GROUP_ARRAY(JSON_ARRAY(
+          id, type, name, run_list, shadow_group,
+          JSON(shadows), state_id, trans_id, src, dst
+        )) AS data
+      FROM
+        new_vertices
+      GROUP BY
+        NULL
+    )
+    -----------------------------------------------------------------
+    -- Group everything into a 1x1 JSON table
+    -----------------------------------------------------------------
+    SELECT
+      JSON_GROUP_OBJECT(name, JSON(data)) AS obj
+    FROM (
+      SELECT 'new_interior_edges' AS name, * FROM json_new_interior_edges
+      UNION ALL
+      SELECT 'new_shadowings' AS name, * FROM json_new_shadowings
+      UNION ALL
+      SELECT 'new_vertices' AS name, * FROM json_new_vertices
+      UNION ALL
+      SELECT 'obsolete_edges' AS name, * FROM json_obsolete_edges
+    )
+    GROUP BY
+      NULL
+  }, {}, @args);
+
+  $self->_log->debug("new style transplantation done");
+
+  unless ($data and length $data) {
+    warn "!!!!!!!!!!!!!!!!!!!!!!!!!!!!";
+    return;
+  }
+
+  my $decoded = $self->_json->decode($data);
+
+  do {
+    open my $f, '>', $guid . '.json';
+    print $f $data;
+    close $f;
+  };
+
+#  return _insert_dfa_old($self, $d, @start_ids);
+
+  $self->base_graph->g->add_vertices(map {
+    $_->[0] . ''
+  } @{ $decoded->{new_vertices} });
+
+  $self->base_graph->_dbh->do(q{
+    INSERT OR IGNORE INTO vertex_property(
+      vertex,
+      type,
+      name,
+      run_list
+    )
+    SELECT
+      CAST(JSON_EXTRACT(each.value, '$[0]') AS TEXT) AS vertex,
+      CAST(JSON_EXTRACT(each.value, '$[1]') AS TEXT) AS type,
+      CAST(JSON_EXTRACT(each.value, '$[2]') AS TEXT) AS name,
+      CAST(JSON_EXTRACT(each.value, '$[3]') AS TEXT) AS run_list
+    FROM
+      JSON_EACH(JSON_EXTRACT(?, '$.new_vertices')) each
+  }, {}, $data);
+
+  $self->base_graph->_dbh->do(q{
+    INSERT OR IGNORE INTO vertex_shadows(vertex, shadows)
+    SELECT
+      CAST(JSON_EXTRACT(each.value, '$[0]') AS TEXT) AS vertex,
+      CAST(JSON_EXTRACT(each.value, '$[1]') AS TEXT) AS shadows
+    FROM
+      JSON_EACH(JSON_EXTRACT(?, '$.new_shadowings')) each
+    WHERE
+      JSON_EXTRACT(each.value, '$[1]') IS NOT NULL
+  }, {}, $data);
+
+  # convert to strings and delete edges
+  $self->base_graph->g->feather_delete_edges(
+    map { [ map { $_ . '' } @$_ ] }
+      @{ $decoded->{obsolete_edges} }
+  );
+
+  # ...
+
+  $self->_log->debug("edge insertion");
   $self->base_graph->_dbh->do(q{
     INSERT OR IGNORE INTO Edge(src, dst)
-    SELECT
-      out_src,
-      out_dst
-    FROM
-      t_connection
+    WITH
+    lhs AS (
+      SELECT
+        Edge.src AS src,
+        xxx.vertex AS dst
+      FROM
+        Edge
+          INNER JOIN vertex_shadows xxx
+            ON (Edge.dst = xxx.shadows)
+          LEFT JOIN vertex_shadows yyy
+            ON (Edge.src = yyy.shadows)
+      WHERE
+        yyy.vertex IS NULL
+    ),
+    rhs AS (
+      SELECT
+        xxx.vertex AS src,
+        Edge.dst AS dst
+      FROM
+        Edge
+          INNER JOIN vertex_shadows xxx
+            ON (Edge.src = xxx.shadows)
+          LEFT JOIN vertex_shadows yyy
+            ON (Edge.dst = yyy.shadows)
+      WHERE
+        yyy.vertex IS NULL
+    )
+    SELECT * FROM lhs
+    UNION
+    SELECT * FROM rhs
   });
+  $self->_log->debug("edge insertion done");
+
+  # convert to strings and add interior edges
+  $self->base_graph->g->add_edges(
+    map { [ map { $_ . '' } @$_ ] }
+      @{ $decoded->{new_interior_edges} }
+  );
+
+  $self->base_graph->_dbh->sqlite_backup_to_file(
+    $guid . '-after.sqlite'
+  );
+
+  my %state_to_vertex = map {
+
+    $_->[6], $_->[0] . ''
+
+  } grep {
+
+    defined $_->[6]
+
+  } @{ $decoded->{new_vertices} };
+
+  $self->_log->debugf('state_to_vertex: %s', Dump(\%state_to_vertex));
 
   return %state_to_vertex;
+
 }
 
 1;

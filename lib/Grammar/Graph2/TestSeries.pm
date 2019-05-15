@@ -94,8 +94,8 @@ sub _compile_code {
   my ($self) = @_;
 
   $self->g->_dbh->sqlite_backup_to_file('/home/bjoern/parselov/cxx.sqlite');
-  `cd /home/bjoern/parselov ; perl /home/bjoern/parselov/alx.pl cxx.sqlite > /home/bjoern/parselov/alx/grammar.c`;
-  `cd /home/bjoern/parselov/alx/ ; make`;
+  `cd /home/bjoern/parselov ; perl /home/bjoern/parselov/alx2019.pl cxx.sqlite > /home/bjoern/parselov/alx/src/grammar.c`;
+  `cd /home/bjoern/parselov/alx/build/ ; make`;
 
 }
 
