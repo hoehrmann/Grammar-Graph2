@@ -203,50 +203,6 @@ sub _cover_input_input_edges {
 # This stuff does not really belong here, and not with the other part
 #####################################################################
 
-sub _cover_epsilons_old_and_obsolete {
-  my ($g2) = @_;
-
-#  my $subgraph = _shadowed_subgraph_between($g2,
-#    $g2->gp_start_vertex, $g2->gp_final_vertex);
-
-  my $automata = Grammar::Graph2::Automata->new(
-    base_graph => $g2,
-  );
-
-  my @foo = $g2->_dbh->selectall_array(q{
-    SELECT DISTINCT
-      json_group_array(lhs_e.e_reachable) AS epsilons
---    ,  src_p.vertex AS root
-    FROM
-      vertex_property src_p
-        INNER JOIN Edge 
-          ON (src_p.vertex = Edge.src)
-        INNER JOIN view_epsilon_closure lhs_e
-          ON (Edge.dst = lhs_e.vertex)
-        INNER JOIN vertex_property dst_p
-          ON (lhs_e.e_reachable = dst_p.vertex)
-        LEFT JOIN view_start_vertex start_vertex
-          ON (src_p.vertex = start_vertex.vertex)
-    WHERE
-      (src_p.type = 'Input' OR start_vertex.vertex IS NOT NULL)
-      AND
-      dst_p.type <> 'Input'
-    GROUP BY
-      src_p.vertex
-  });
-
-  my $subgraph = Graph::Feather->new(
-    vertices => [
-      map { @{ $g2->_json->decode($_->[0]) } } @foo
-    ]
-  );
-
-  my ($d, @start_ids) = $automata->subgraph_automaton($subgraph,
-    map { $g2->_json->decode($_->[0]) } @foo );
-
-  my %state_to_vertex = $automata->_insert_dfa($d, @start_ids);
-}
-
 sub _cover_epsilons {
   my ($g2) = @_;
 
