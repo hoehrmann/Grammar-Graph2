@@ -38,7 +38,7 @@ my @dirs = <./data/reftests/*>;
 
 for my $dir (@dirs) {
 
-  next if $dir =~ /lazy-one-or-more|xml2015-element/;
+#  next if $dir =~ /lazy-one-or-more|xml2015-element/;
 
   my @files = File::Find::Rule
     ->file()

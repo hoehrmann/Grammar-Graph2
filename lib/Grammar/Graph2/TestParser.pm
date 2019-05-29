@@ -186,6 +186,14 @@ sub create_t_cxx {
   });
 
   $self->_dbh->do(q{
+    CREATE TABLE alx_all_edges_signature AS
+    SELECT * FROM alx.view_all_edges_signature;
+
+    CREATE TABLE alx_random_full_path_signature AS
+    SELECT * FROM alx.view_random_full_path_signature;
+  });
+
+  $self->_dbh->do(q{
     CREATE TABLE testparser_all_edges AS
     SELECT * FROM result;
     CREATE TABLE testparser_all_edges_shadowed AS
