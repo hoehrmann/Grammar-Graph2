@@ -632,7 +632,7 @@ $self->_dbh->sqlite_backup_to_file('linearity.sqlite');
 }
 
 
-sub _add_self_loop_attributes {
+sub _add_self_loop_attributes__old {
   my ($self) = @_;
 
   my $db_utils = Grammar::Graph2::DBUtils->new(

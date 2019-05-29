@@ -1,0 +1,16 @@
+{
+   "all_matches":[],
+   "grammar_self_loops":[
+      [
+         "A",
+         "irregular"
+      ],
+      [
+         "S",
+         "no"
+      ]
+   ],
+   "parent_child_signature":[],
+   "random_matches":[],
+   "sibling_signature":[]
+}

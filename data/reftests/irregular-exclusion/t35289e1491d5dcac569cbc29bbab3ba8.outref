@@ -1,0 +1,25 @@
+{
+   "all_matches":[],
+   "all_tree_matches":[],
+   "grammar_self_loops":[
+      [
+         "A",
+         "no"
+      ],
+      [
+         "B",
+         "irregular"
+      ],
+      [
+         "C",
+         "irregular"
+      ],
+      [
+         "S",
+         "no"
+      ]
+   ],
+   "parent_child_signature":[],
+   "random_matches":[],
+   "sibling_signature":[]
+}

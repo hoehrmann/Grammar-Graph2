@@ -130,7 +130,7 @@ sub _init {
   $self->_merge_duplicates();
   $self->_log->debug('done _merge_duplicates');
 
-$self->_dbh->sqlite_backup_to_file('Slow.sqlite');
+  # $self->_dbh->sqlite_backup_to_file('Slow.sqlite');
 
   $self->_log->debug('starting _rename_vertices');
   $self->_rename_vertices();

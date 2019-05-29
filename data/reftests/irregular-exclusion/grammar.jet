@@ -1,0 +1,96 @@
+["grammar", {}, [
+
+  ["rule", {"combine": "fallback", "name": "ALPHA"}, [
+    ["choice", {}, [
+      ["range", {"first": 65, "last": 90}, []],
+      ["range", {"first": 97, "last": 122}, []]]]]],
+
+  ["rule", {"combine": "fallback", "name": "BIT"}, [
+    ["choice", {}, [
+      ["asciiInsensitiveString", {"text": "0"}, []],
+      ["asciiInsensitiveString", {"text": "1"}, []]]]]],
+
+  ["rule", {"combine": "fallback", "name": "CHAR"}, [
+    ["range", {"first": 1, "last": 127}, []]]],
+
+  ["rule", {"combine": "fallback", "name": "CR"}, [
+    ["range", {"first": 13, "last": 13}, []]]],
+
+  ["rule", {"combine": "fallback", "name": "CRLF"}, [
+    ["group", {}, [
+      ["ref", {"name": "CR"}, []],
+      ["ref", {"name": "LF"}, []]]]]],
+
+  ["rule", {"combine": "fallback", "name": "CTL"}, [
+    ["choice", {}, [
+      ["range", {"first": 0, "last": 31}, []],
+      ["range", {"first": 127, "last": 127}, []]]]]],
+
+  ["rule", {"combine": "fallback", "name": "DIGIT"}, [
+    ["range", {"first": 48, "last": 57}, []]]],
+
+  ["rule", {"combine": "fallback", "name": "DQUOTE"}, [
+    ["range", {"first": 34, "last": 34}, []]]],
+
+  ["rule", {"combine": "fallback", "name": "HEXDIG"}, [
+    ["choice", {}, [
+      ["ref", {"name": "DIGIT"}, []],
+      ["asciiInsensitiveString", {"text": "A"}, []],
+      ["asciiInsensitiveString", {"text": "B"}, []],
+      ["asciiInsensitiveString", {"text": "C"}, []],
+      ["asciiInsensitiveString", {"text": "D"}, []],
+      ["asciiInsensitiveString", {"text": "E"}, []],
+      ["asciiInsensitiveString", {"text": "F"}, []]]]]],
+
+  ["rule", {"combine": "fallback", "name": "HTAB"}, [
+    ["range", {"first": 9, "last": 9}, []]]],
+
+  ["rule", {"combine": "fallback", "name": "LF"}, [
+    ["range", {"first": 10, "last": 10}, []]]],
+
+  ["rule", {"combine": "fallback", "name": "LWSP"}, [
+    ["repetition", {"max": null, "min": 0}, [
+      ["choice", {}, [
+        ["ref", {"name": "WSP"}, []],
+        ["group", {}, [
+          ["ref", {"name": "CRLF"}, []],
+          ["ref", {"name": "WSP"}, []]]]]]]]]],
+
+  ["rule", {"combine": "fallback", "name": "OCTET"}, [
+    ["range", {"first": 0, "last": 255}, []]]],
+
+  ["rule", {"combine": "fallback", "name": "SP"}, [
+    ["range", {"first": 32, "last": 32}, []]]],
+
+  ["rule", {"combine": "fallback", "name": "VCHAR"}, [
+    ["range", {"first": 33, "last": 126}, []]]],
+
+  ["rule", {"combine": "fallback", "name": "WSP"}, [
+    ["choice", {}, [
+      ["ref", {"name": "SP"}, []],
+      ["ref", {"name": "HTAB"}, []]]]]],
+
+  ["rule", {"name": "S"}, [
+    ["ref", {"name": "A"}, []]]],
+
+  ["rule", {"name": "A"}, [
+    ["exclusion", {}, [
+      ["ref", {"name": "B"}, []],
+      ["ref", {"name": "C"}, []]]]]],
+
+  ["rule", {"name": "B"}, [
+    ["choice", {}, [
+      ["group", {}, [
+        ["asciiInsensitiveString", {"text": "o"}, []],
+        ["ref", {"name": "B"}, []],
+        ["asciiInsensitiveString", {"text": "x"}, []]]],
+      ["asciiInsensitiveString", {"text": ""}, []]]]]],
+
+  ["rule", {"name": "C"}, [
+    ["choice", {}, [
+      ["group", {}, [
+        ["asciiInsensitiveString", {"text": "oo"}, []],
+        ["ref", {"name": "C"}, []],
+        ["asciiInsensitiveString", {"text": "xx"}, []]]],
+      ["asciiInsensitiveString", {"text": ""}, []]]]]]]]
+

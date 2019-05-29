@@ -134,9 +134,9 @@ sub _insert_dfa {
 
   my $guid = sprintf '%08x', int(rand( 2**31 ));
 
-  $self->base_graph->_dbh->sqlite_backup_to_file(
-    $guid . '-before.sqlite'
-  );
+  # $self->base_graph->_dbh->sqlite_backup_to_file(
+  #   $guid . '-before.sqlite'
+  # );
 
   my ($base_id) = $self->base_graph->_dbh->selectrow_array(q{
     SELECT 1 + MAX(0 + vertex_name) FROM Vertex;
@@ -404,11 +404,11 @@ sub _insert_dfa {
 
   my $decoded = $self->_json->decode($data);
 
-  do {
-    open my $f, '>', $guid . '.json';
-    print $f $data;
-    close $f;
-  };
+  # do {
+  #   open my $f, '>', $guid . '.json';
+  #   print $f $data;
+  #   close $f;
+  # };
 
 #  return _insert_dfa_old($self, $d, @start_ids);
 
@@ -493,9 +493,9 @@ sub _insert_dfa {
       @{ $decoded->{new_interior_edges} }
   );
 
-  $self->base_graph->_dbh->sqlite_backup_to_file(
-    $guid . '-after.sqlite'
-  );
+  # $self->base_graph->_dbh->sqlite_backup_to_file(
+  #   $guid . '-after.sqlite'
+  # );
 
   my %state_to_vertex = map {
 

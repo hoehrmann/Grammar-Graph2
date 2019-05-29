@@ -117,7 +117,7 @@ eval {
 
 };
 
-warn if $@;
+  fail("exception in $input_path: $@") if $@;
 
   }
 
