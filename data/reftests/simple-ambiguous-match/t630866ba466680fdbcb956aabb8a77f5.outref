@@ -46,12 +46,122 @@
          4
       ]
    ],
-   "all_tree_matches":[
+   "all_matches_signatures":[
       [
-         "",
-         [],
-         1,
-         4
+         [
+            1,
+            "Start",
+            "",
+            1,
+            "Start",
+            "S"
+         ],
+         [
+            1,
+            "Start",
+            "S",
+            4,
+            "Final",
+            "S"
+         ],
+         [
+            4,
+            "Final",
+            "",
+            null,
+            null,
+            null
+         ],
+         [
+            4,
+            "Final",
+            "S",
+            4,
+            "Final",
+            ""
+         ]
+      ],
+      [
+         [
+            1,
+            "Start",
+            "",
+            1,
+            "Start",
+            "S"
+         ],
+         [
+            1,
+            "Start",
+            "S",
+            1,
+            "Start",
+            "X"
+         ],
+         [
+            1,
+            "Start",
+            "X",
+            2,
+            "Final",
+            "X"
+         ],
+         [
+            2,
+            "Final",
+            "X",
+            2,
+            "Start",
+            "Y"
+         ],
+         [
+            2,
+            "Start",
+            "Y",
+            3,
+            "Final",
+            "Y"
+         ],
+         [
+            3,
+            "Final",
+            "Y",
+            3,
+            "Start",
+            "Z"
+         ],
+         [
+            3,
+            "Start",
+            "Z",
+            4,
+            "Final",
+            "Z"
+         ],
+         [
+            4,
+            "Final",
+            "",
+            null,
+            null,
+            null
+         ],
+         [
+            4,
+            "Final",
+            "S",
+            4,
+            "Final",
+            ""
+         ],
+         [
+            4,
+            "Final",
+            "Z",
+            4,
+            "Final",
+            "S"
+         ]
       ]
    ],
    "grammar_self_loops":[
@@ -72,18 +182,6 @@
          "no"
       ]
    ],
-   "parent_child_signature":[
-      [
-         1,
-         "",
-         null,
-         null,
-         null,
-         null,
-         4,
-         ""
-      ]
-   ],
    "random_matches":[
       [
          "",
@@ -99,5 +197,40 @@
          4
       ]
    ],
-   "sibling_signature":[]
+   "random_matches_signatures":[
+      [
+         [
+            1,
+            "Start",
+            "",
+            1,
+            "Start",
+            "S"
+         ],
+         [
+            1,
+            "Start",
+            "S",
+            4,
+            "Final",
+            "S"
+         ],
+         [
+            4,
+            "Final",
+            "",
+            null,
+            null,
+            null
+         ],
+         [
+            4,
+            "Final",
+            "S",
+            4,
+            "Final",
+            ""
+         ]
+      ]
+   ]
 }

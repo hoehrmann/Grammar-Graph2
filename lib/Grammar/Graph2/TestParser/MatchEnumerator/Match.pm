@@ -53,6 +53,56 @@ has '_json' => (
 
 sub flat_path { [] }
 
+sub signature_from_vertex_list {
+
+  my ($self) = @_;
+
+  my $g = $self->g;
+  my $list = [ $self->to_list ];
+
+  my @signature = $g->_dbh->selectall_array(q{
+    WITH
+    base AS (
+      SELECT
+        each.key AS sort_key,
+        CAST(json_extract(each.value, '$[0]') AS INT) AS pos,
+        CAST(json_extract(each.value, '$[1]') AS TEXT) AS vertex
+      FROM
+        json_each(?) each
+    )
+
+    SELECT
+      base.pos AS src_pos,
+      vertex_p.type AS src_type,
+      vertex_p.name AS src_name,
+      LEAD(base.pos) OVER w AS dst_pos,
+      LEAD(vertex_p.type) OVER w AS dst_type,
+      LEAD(vertex_p.name) OVER w AS dst_name
+
+    FROM
+      base
+        INNER JOIN view_vp_plus vertex_p
+          ON (vertex_p.vertex = base.vertex)
+    
+    WHERE
+      (vertex_p.is_push OR vertex_p.is_pop)
+
+    WINDOW w AS (ORDER BY base.sort_key)
+
+    ORDER BY
+      src_pos,
+      src_type,
+      src_name,
+      dst_pos,
+      dst_type,
+      dst_name
+
+  }, {}, $g->_json->encode($list));
+
+  return \@signature;
+
+}
+
 sub _build_tree_from_vertex_list {
   my ($g, $list, %o) = @_;
 

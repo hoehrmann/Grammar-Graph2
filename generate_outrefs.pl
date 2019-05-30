@@ -36,7 +36,7 @@ local $Storable::canonical = 1;
 # my @dirs = <./data/reftests/alxbug>;
 my @dirs = <./data/reftests/*>;
 
-for my $dir (@dirs) {
+for my $dir (sort @dirs) {
 
 #  next if $dir =~ /lazy-one-or-more|xml2015-element/;
 
@@ -45,7 +45,7 @@ for my $dir (@dirs) {
     ->name( qr/^.*\.input$/ )
     ->in( $dir );
 
-  for my $input_path (@files) {
+  for my $input_path (sort @files) {
 
     my $contents = do {
       local $/;
@@ -84,7 +84,7 @@ for my $dir (@dirs) {
 
 }
 
-for my $dir (@dirs) {
+for my $dir (sort @dirs) {
 
   my $ts = Grammar::Graph2::TestSeries->new(
     base_path => $dir,
@@ -95,26 +95,30 @@ for my $dir (@dirs) {
 #  say $ts->options->{startrule};
 
   for my $input_path ( $ts->input_file_paths ) {
-    say "Reading $input_path";
 
-    my $case = Grammar::Graph2::TestCase->new(
-      series => $ts,
-      input_path => $input_path,
-    );
+    eval {
+      say "Reading $input_path";
 
-    # TODO(bh): find .outref files with no corresponding .input
+      my $case = Grammar::Graph2::TestCase->new(
+        series => $ts,
+        input_path => $input_path,
+      );
 
-    my $ref = $case->parse_to_ref_data();
+      # TODO(bh): find .outref files with no corresponding .input
 
-    my $out_path = $ts->base_path . '/' . $case->basename . '.outref';
+      my $ref = $case->parse_to_ref_data();
 
-    say "generating $out_path";
+      my $out_path = $ts->base_path . '/' . $case->basename . '.outref';
 
-    open my $outref, '>', $out_path;
-    print $outref JSON->new->canonical(1)->ascii(1)->indent(1)->encode($ref);
-    close $outref;
+      say "generating $out_path";
+
+      open my $outref, '>', $out_path;
+      print $outref JSON->new->canonical(1)->ascii(1)->indent(1)->encode($ref);
+      close $outref;
+    };
 
   }
+
 }
 
 __END__

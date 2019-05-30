@@ -61,12 +61,154 @@
          2
       ]
    ],
-   "all_tree_matches":[
+   "all_matches_signatures":[
       [
-         "",
-         [],
-         1,
-         2
+         [
+            1,
+            "Start",
+            "",
+            1,
+            "Start",
+            "S"
+         ],
+         [
+            1,
+            "Start",
+            "A",
+            1,
+            "Start",
+            "C"
+         ],
+         [
+            1,
+            "Start",
+            "C",
+            2,
+            "Final",
+            "C"
+         ],
+         [
+            1,
+            "Start",
+            "S",
+            1,
+            "Start",
+            "A"
+         ],
+         [
+            2,
+            "Final",
+            "",
+            null,
+            null,
+            null
+         ],
+         [
+            2,
+            "Final",
+            "A",
+            2,
+            "Final",
+            "S"
+         ],
+         [
+            2,
+            "Final",
+            "C",
+            2,
+            "Final",
+            "A"
+         ],
+         [
+            2,
+            "Final",
+            "S",
+            2,
+            "Final",
+            ""
+         ]
+      ],
+      [
+         [
+            1,
+            "Final",
+            "B",
+            1,
+            "Start",
+            "C"
+         ],
+         [
+            1,
+            "Start",
+            "",
+            1,
+            "Start",
+            "S"
+         ],
+         [
+            1,
+            "Start",
+            "A",
+            1,
+            "Start",
+            "B"
+         ],
+         [
+            1,
+            "Start",
+            "B",
+            1,
+            "Final",
+            "B"
+         ],
+         [
+            1,
+            "Start",
+            "C",
+            2,
+            "Final",
+            "C"
+         ],
+         [
+            1,
+            "Start",
+            "S",
+            1,
+            "Start",
+            "A"
+         ],
+         [
+            2,
+            "Final",
+            "",
+            null,
+            null,
+            null
+         ],
+         [
+            2,
+            "Final",
+            "A",
+            2,
+            "Final",
+            "S"
+         ],
+         [
+            2,
+            "Final",
+            "C",
+            2,
+            "Final",
+            "A"
+         ],
+         [
+            2,
+            "Final",
+            "S",
+            2,
+            "Final",
+            ""
+         ]
       ]
    ],
    "grammar_self_loops":[
@@ -87,18 +229,6 @@
          "no"
       ]
    ],
-   "parent_child_signature":[
-      [
-         1,
-         "",
-         null,
-         null,
-         null,
-         null,
-         2,
-         ""
-      ]
-   ],
    "random_matches":[
       [
          "",
@@ -109,12 +239,6 @@
                   [
                      "A",
                      [
-                        [
-                           "B",
-                           [],
-                           1,
-                           1
-                        ],
                         [
                            "C",
                            [],
@@ -134,5 +258,72 @@
          2
       ]
    ],
-   "sibling_signature":[]
+   "random_matches_signatures":[
+      [
+         [
+            1,
+            "Start",
+            "",
+            1,
+            "Start",
+            "S"
+         ],
+         [
+            1,
+            "Start",
+            "A",
+            1,
+            "Start",
+            "C"
+         ],
+         [
+            1,
+            "Start",
+            "C",
+            2,
+            "Final",
+            "C"
+         ],
+         [
+            1,
+            "Start",
+            "S",
+            1,
+            "Start",
+            "A"
+         ],
+         [
+            2,
+            "Final",
+            "",
+            null,
+            null,
+            null
+         ],
+         [
+            2,
+            "Final",
+            "A",
+            2,
+            "Final",
+            "S"
+         ],
+         [
+            2,
+            "Final",
+            "C",
+            2,
+            "Final",
+            "A"
+         ],
+         [
+            2,
+            "Final",
+            "S",
+            2,
+            "Final",
+            ""
+         ]
+      ]
+   ]
 }

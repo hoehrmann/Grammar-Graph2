@@ -68,56 +68,103 @@ for my $dir (sort @dirs) {
   $ts->g->_dbh->sqlite_backup_to_file( $ts->basename . '.sqlite' );
 
   for my $input_path ( sort $ts->input_file_paths ) {
-eval {
-    my $case = Grammar::Graph2::TestCase->new(
-      series => $ts,
-      input_path => $input_path,
-    );
 
-    my $path_prefix = $ts->base_path . '/' . $case->basename;
+    eval {
+      my $case = Grammar::Graph2::TestCase->new(
+        series => $ts,
+        input_path => $input_path,
+      );
 
-    my $got = $case->parse_to_ref_data();
-    my $expected = do {
-      open my $f, '<', $path_prefix . '.outref';
-      local $/;
-      JSON->new->decode(<$f>);
+      my $path_prefix = $ts->base_path . '/' . $case->basename;
+
+      my $got = $case->parse_to_ref_data();
+
+      my $expected = do {
+        open my $f, '<', $path_prefix . '.outref';
+        local $/;
+        JSON->new->decode(<$f>);
+      };
+
+      for my $set (qw/all_matches_signatures random_matches_signatures/) {
+
+        my $mix = 0;
+
+        for my $m (@{ $expected->{$set} }) {
+
+          my ($is_subset) = $got->{p}->_dbh->selectrow_array(q{
+            WITH
+            args AS (
+              SELECT ? AS sig
+            ),
+            decoded AS (
+              SELECT
+                JSON_EXTRACT(d.value, '$[0]') AS src_pos,
+                JSON_EXTRACT(d.value, '$[1]') AS src_type,
+                JSON_EXTRACT(d.value, '$[2]') AS src_name,
+                JSON_EXTRACT(d.value, '$[3]') AS dst_pos,
+                JSON_EXTRACT(d.value, '$[4]') AS dst_type,
+                JSON_EXTRACT(d.value, '$[5]') AS dst_name
+              FROM
+                args  
+                  INNER JOIN json_each(args.sig) d
+            ),
+            only_sig AS (
+              SELECT 
+                *
+              FROM
+                decoded
+              EXCEPT
+              SELECT
+                *
+              FROM
+                alx_all_edges_signature
+            )
+            SELECT
+              COUNT(*) = 0 AS is_subset
+            FROM
+              only_sig
+          }, {}, JSON->new->encode($m));
+
+          is( $is_subset, 0, "$path_prefix $set $mix signature is subset" );
+
+          $mix += 1;
+
+        }
+
+      }
+
+      is_deeply(
+        $got->{all_matches_signatures},
+        $expected->{all_matches_signatures} // [], 
+        $path_prefix . ' all_matches_signatures'
+      ) or diag(
+        Dump {
+          got => $got->{all_matches_signatures},
+          expected => $expected->{all_matches_signatures}
+        }
+      );
+
+      is_deeply $got->{all_matches},
+        $expected->{all_matches},
+        $path_prefix . ' all_matches' or diag(
+          Dump {
+            got => $got->{all_matches},
+            expected => $expected->{all_matches}
+          }
+        );
+  #
+  #    is_deeply $got->{grammar_self_loops},
+  #      $expected->{grammar_self_loops},
+  #      $path_prefix . ' grammar_self_loops' or diag(
+  #        Dump {
+  #          expected => $expected->{grammar_self_loops},
+  #          got => $got->{grammar_self_loops},
+  #        }
+  #      );
+
     };
 
-# broekn
-#    is_deeply $got->{parent_child_signature},
-#      $expected->{parent_child_signature},
-#      $path_prefix . ' parent_child_signature' or diag(
-#        Dump {
-#          got => $got->{parent_child_signature},
-#          expected => $expected->{parent_child_signature}
-#        }
-#      );
-#
-#    is_deeply $got->{sibling_signature},
-#      $expected->{sibling_signature},
-#      $path_prefix . ' sibling_signature';
-
-    is_deeply $got->{all_matches},
-      $expected->{all_matches},
-      $path_prefix . ' all_matches' or diag(
-        Dump {
-          got => $got->{all_matches},
-          expected => $expected->{all_matches}
-        }
-      );
-
-    is_deeply $got->{grammar_self_loops},
-      $expected->{grammar_self_loops},
-      $path_prefix . ' grammar_self_loops' or diag(
-        Dump {
-          expected => $expected->{grammar_self_loops},
-          got => $got->{grammar_self_loops},
-        }
-      );
-
-};
-
-  fail("exception in $input_path: $@") if $@;
+    fail("exception in $input_path: $@") if $@;
 
   }
 

@@ -123,7 +123,7 @@ sub create_t_cxx {
 
 #  warn "cxx $path";
   unlink '/dev/shm/testparser.sqlite';
-  `/home/bjoern/parselov/alx/build/src/alx --in=$path --all-edges --db=/dev/shm/testparser.sqlite`;
+  `/home/bjoern/parselov/alx/build/src/alx --in=$path --all-edges --random=RANDOM --db=/dev/shm/testparser.sqlite`;
 #  `cp /home/bjoern/parselov/cxx.cbor $path.cbor`;
 #   open my $fh, '<', '/home/bjoern/parselov/cxx.cbor';
 #   my $cbor = do { local $/; <$fh>; };
@@ -147,58 +147,77 @@ sub create_t_cxx {
 
   $self->_create_t_empty();
 
-  $self->_dbh->do(q{
-    INSERT OR IGNORE INTO t 
-    SELECT
-      src_node.pos AS src_pos,
-      CAST(src_node.vertex AS TEXT) AS src_vertex,
-      mid_src_node.pos AS mid_src_pos,
-      CAST(mid_src_node.vertex AS TEXT) AS mid_src_vertex,
-      mid_dst_node.pos AS mid_dst_pos,
-      CAST(mid_dst_node.vertex AS TEXT) AS mid_dst_vertex,
-      dst_node.pos AS dst_pos,
-      CAST(dst_node.vertex AS TEXT) AS dst_vertex
-    FROM
-      alx.graph_quads q
-        LEFT JOIN alx.graph_nodes src_node
-          ON (q.src_id = src_node.node_id)
-        LEFT JOIN alx.graph_nodes mid_src_node
-          ON (q.mid_src_id = mid_src_node.node_id)
-        LEFT JOIN alx.graph_nodes mid_dst_node
-          ON (q.mid_dst_id = mid_dst_node.node_id)
-        LEFT JOIN alx.graph_nodes dst_node
-          ON (q.dst_id = dst_node.node_id)
-  });
+  eval {
+
+    $self->_dbh->do(q{
+      INSERT OR IGNORE INTO t 
+      SELECT
+        src_node.pos AS src_pos,
+        CAST(src_node.vertex AS TEXT) AS src_vertex,
+        mid_src_node.pos AS mid_src_pos,
+        CAST(mid_src_node.vertex AS TEXT) AS mid_src_vertex,
+        mid_dst_node.pos AS mid_dst_pos,
+        CAST(mid_dst_node.vertex AS TEXT) AS mid_dst_vertex,
+        dst_node.pos AS dst_pos,
+        CAST(dst_node.vertex AS TEXT) AS dst_vertex
+      FROM
+        alx.graph_quads q
+          LEFT JOIN alx.graph_nodes src_node
+            ON (q.src_id = src_node.node_id)
+          LEFT JOIN alx.graph_nodes mid_src_node
+            ON (q.mid_src_id = mid_src_node.node_id)
+          LEFT JOIN alx.graph_nodes mid_dst_node
+            ON (q.mid_dst_id = mid_dst_node.node_id)
+          LEFT JOIN alx.graph_nodes dst_node
+            ON (q.dst_id = dst_node.node_id)
+    });
+
+    $self->_dbh->do(q{
+      CREATE TABLE result AS
+      SELECT
+        src_idx.pos AS src_pos,
+        CAST(src_idx.vertex AS TEXT) AS src_vertex,
+        dst_idx.pos AS dst_pos,
+        CAST(dst_idx.vertex AS TEXT) AS dst_vertex
+      FROM
+        alx.all_edges_edges e
+          INNER JOIN alx.all_edges_index src_idx
+            ON (src_idx.node_id = e.src_id)
+          INNER JOIN alx.all_edges_index dst_idx
+            ON (dst_idx.node_id = e.dst_id)
+    });
+
+    $self->_dbh->do(q{
+      CREATE TABLE testparser_all_edges AS
+      SELECT * FROM result;
+      CREATE TABLE testparser_all_edges_shadowed AS
+      SELECT * FROM result;
+    });
+
+    $self->_dbh->do(q{
+      DROP TABLE IF EXISTS alx_all_edges_signature;
+      CREATE TABLE alx_all_edges_signature AS
+      SELECT * FROM alx.view_all_edges_signature;
+
+      DROP TABLE IF EXISTS alx_random_full_path_signature;
+      CREATE TABLE alx_random_full_path_signature AS
+      SELECT * FROM alx.view_random_full_path_signature;
+    });
+
+    my ($is_subset) = $self->_dbh->selectrow_array(q{
+      SELECT
+        is_subset
+      FROM
+        alx.view_dbg_rfp_is_subset
+    });
+
+    if (not $is_subset) {
+      $self->_log->error("rfp is not subset");
+    }
+
+  };
 
   $self->_dbh->do(q{
-    CREATE TABLE result AS
-    SELECT
-      src_idx.pos AS src_pos,
-      CAST(src_idx.vertex AS TEXT) AS src_vertex,
-      dst_idx.pos AS dst_pos,
-      CAST(dst_idx.vertex AS TEXT) AS dst_vertex
-    FROM
-      alx.all_edges_edges e
-        INNER JOIN alx.all_edges_index src_idx
-          ON (src_idx.node_id = e.src_id)
-        INNER JOIN alx.all_edges_index dst_idx
-          ON (dst_idx.node_id = e.dst_id)
-  });
-
-  $self->_dbh->do(q{
-    CREATE TABLE alx_all_edges_signature AS
-    SELECT * FROM alx.view_all_edges_signature;
-
-    CREATE TABLE alx_random_full_path_signature AS
-    SELECT * FROM alx.view_random_full_path_signature;
-  });
-
-  $self->_dbh->do(q{
-    CREATE TABLE testparser_all_edges AS
-    SELECT * FROM result;
-    CREATE TABLE testparser_all_edges_shadowed AS
-    SELECT * FROM result;
-
     DETACH DATABASE 'alx'
   });
 

@@ -1,6 +1,6 @@
 {
    "all_matches":[],
-   "all_tree_matches":[],
+   "all_matches_signatures":[],
    "grammar_self_loops":[
       [
          "A",
@@ -9,58 +9,6 @@
       [
          "S",
          "no"
-      ]
-   ],
-   "parent_child_signature":[
-      [
-         1,
-         "",
-         1,
-         "A",
-         7,
-         "A",
-         7,
-         ""
-      ],
-      [
-         1,
-         "A",
-         1,
-         "A",
-         6,
-         "A",
-         7,
-         "A"
-      ],
-      [
-         1,
-         "A",
-         2,
-         "A",
-         5,
-         "A",
-         6,
-         "A"
-      ],
-      [
-         2,
-         "A",
-         3,
-         "A",
-         4,
-         "A",
-         5,
-         "A"
-      ],
-      [
-         3,
-         "A",
-         null,
-         null,
-         null,
-         null,
-         4,
-         "A"
       ]
    ],
    "random_matches":[
@@ -86,11 +34,11 @@
                                        4
                                     ]
                                  ],
-                                 2,
+                                 3,
                                  5
                               ]
                            ],
-                           1,
+                           2,
                            6
                         ]
                      ],
@@ -106,5 +54,104 @@
          7
       ]
    ],
-   "sibling_signature":[]
+   "random_matches_signatures":[
+      [
+         [
+            1,
+            "Start",
+            "",
+            1,
+            "Start",
+            "S"
+         ],
+         [
+            1,
+            "Start",
+            "A",
+            2,
+            "Start",
+            "A"
+         ],
+         [
+            1,
+            "Start",
+            "S",
+            1,
+            "Start",
+            "A"
+         ],
+         [
+            2,
+            "Start",
+            "A",
+            3,
+            "Start",
+            "A"
+         ],
+         [
+            3,
+            "Start",
+            "A",
+            3,
+            "Start",
+            "A"
+         ],
+         [
+            3,
+            "Start",
+            "A",
+            4,
+            "Final",
+            "A"
+         ],
+         [
+            4,
+            "Final",
+            "A",
+            5,
+            "Final",
+            "A"
+         ],
+         [
+            5,
+            "Final",
+            "A",
+            6,
+            "Final",
+            "A"
+         ],
+         [
+            6,
+            "Final",
+            "A",
+            7,
+            "Final",
+            "A"
+         ],
+         [
+            7,
+            "Final",
+            "",
+            null,
+            null,
+            null
+         ],
+         [
+            7,
+            "Final",
+            "A",
+            7,
+            "Final",
+            "S"
+         ],
+         [
+            7,
+            "Final",
+            "S",
+            7,
+            "Final",
+            ""
+         ]
+      ]
+   ]
 }

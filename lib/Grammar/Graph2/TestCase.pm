@@ -64,33 +64,12 @@ sub parse_to_ref_data {
     grep { defined } $self->series->options->{enumerate_all_paths} ?
       $e->all_matches() : ();
 
+  my @random_matches = map {
+    $e->random_match()
+  } 1 .. 32;
+
   return {
-    parent_child_signature => $p->_dbh->selectall_arrayref(q{
-      SELECT DISTINCT
-        parent_start_pos,
-        parent_start_name,
-        first_child_pos,
-        first_child_name,
-        last_child_pos,
-        last_child_name,
-        parent_final_pos,
-        parent_final_name
-      FROM
-        view_parent_child_signature
-      ORDER BY 
-        1, 2, 3, 4, 5, 6, 7, 8
-    }),
-    sibling_signature => $p->_dbh->selectall_arrayref(q{
-      SELECT DISTINCT 
-        lhs_final_pos,
-        lhs_final_name,
-        rhs_start_pos,
-        rhs_start_name
-      FROM
-        view_sibling_signature
-      ORDER BY
-        1, 2, 3, 4
-    }),
+    p => $p,
     random_matches => [
       sort_by {
         Storable::freeze(\$_)
@@ -100,9 +79,7 @@ sub parse_to_ref_data {
         $_->to_tree(pruned => 1)
       } grep {
         defined
-      } map {
-        $e->random_match()
-      } 1 .. 32
+      } @random_matches
     ],
     all_matches => [
       sort_by {
@@ -115,13 +92,24 @@ sub parse_to_ref_data {
         defined
       } @all_matches
     ],
-    all_tree_matches => [
+    random_matches_signatures => [
       sort_by {
         Storable::freeze(\$_)
       } uniq_by {
         Storable::freeze(\$_)
       } map {
-        $_->tree_match_to_tree()
+        $_->signature_from_vertex_list()
+      } grep {
+        defined
+      } @random_matches
+    ],
+    all_matches_signatures => [
+      sort_by {
+        Storable::freeze(\$_)
+      } uniq_by {
+        Storable::freeze(\$_)
+      } map {
+        $_->signature_from_vertex_list()
       } grep {
         defined
       } @all_matches

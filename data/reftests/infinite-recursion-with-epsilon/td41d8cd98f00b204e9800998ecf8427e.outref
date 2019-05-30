@@ -1,6 +1,6 @@
 {
    "all_matches":[],
-   "all_tree_matches":[],
+   "all_matches_signatures":[],
    "grammar_self_loops":[
       [
          "A",
@@ -11,7 +11,6 @@
          "no"
       ]
    ],
-   "parent_child_signature":[],
    "random_matches":[],
-   "sibling_signature":[]
+   "random_matches_signatures":[]
 }

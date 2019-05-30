@@ -1,6 +1,6 @@
 {
    "all_matches":[],
-   "all_tree_matches":[],
+   "all_matches_signatures":[],
    "grammar_self_loops":[
       [
          "A",
@@ -9,88 +9,6 @@
       [
          "S",
          "no"
-      ]
-   ],
-   "parent_child_signature":[
-      [
-         1,
-         "",
-         1,
-         "A",
-         12,
-         "A",
-         12,
-         ""
-      ],
-      [
-         1,
-         "A",
-         1,
-         "A",
-         10,
-         "A",
-         11,
-         "A"
-      ],
-      [
-         1,
-         "A",
-         1,
-         "A",
-         11,
-         "A",
-         12,
-         "A"
-      ],
-      [
-         1,
-         "A",
-         2,
-         "A",
-         9,
-         "A",
-         10,
-         "A"
-      ],
-      [
-         2,
-         "A",
-         3,
-         "A",
-         8,
-         "A",
-         9,
-         "A"
-      ],
-      [
-         3,
-         "A",
-         4,
-         "A",
-         7,
-         "A",
-         8,
-         "A"
-      ],
-      [
-         4,
-         "A",
-         5,
-         "A",
-         6,
-         "A",
-         7,
-         "A"
-      ],
-      [
-         5,
-         "A",
-         null,
-         null,
-         null,
-         null,
-         6,
-         "A"
       ]
    ],
    "random_matches":[
@@ -125,23 +43,23 @@
                                                          6
                                                       ]
                                                    ],
-                                                   4,
+                                                   5,
                                                    7
                                                 ]
                                              ],
-                                             3,
+                                             5,
                                              8
                                           ]
                                        ],
-                                       2,
+                                       4,
                                        9
                                     ]
                                  ],
-                                 1,
+                                 3,
                                  10
                               ]
                            ],
-                           1,
+                           2,
                            11
                         ]
                      ],
@@ -157,5 +75,152 @@
          12
       ]
    ],
-   "sibling_signature":[]
+   "random_matches_signatures":[
+      [
+         [
+            1,
+            "Start",
+            "",
+            1,
+            "Start",
+            "S"
+         ],
+         [
+            1,
+            "Start",
+            "A",
+            2,
+            "Start",
+            "A"
+         ],
+         [
+            1,
+            "Start",
+            "S",
+            1,
+            "Start",
+            "A"
+         ],
+         [
+            2,
+            "Start",
+            "A",
+            3,
+            "Start",
+            "A"
+         ],
+         [
+            3,
+            "Start",
+            "A",
+            4,
+            "Start",
+            "A"
+         ],
+         [
+            4,
+            "Start",
+            "A",
+            5,
+            "Start",
+            "A"
+         ],
+         [
+            5,
+            "Start",
+            "A",
+            5,
+            "Start",
+            "A"
+         ],
+         [
+            5,
+            "Start",
+            "A",
+            5,
+            "Start",
+            "A"
+         ],
+         [
+            5,
+            "Start",
+            "A",
+            6,
+            "Final",
+            "A"
+         ],
+         [
+            6,
+            "Final",
+            "A",
+            7,
+            "Final",
+            "A"
+         ],
+         [
+            7,
+            "Final",
+            "A",
+            8,
+            "Final",
+            "A"
+         ],
+         [
+            8,
+            "Final",
+            "A",
+            9,
+            "Final",
+            "A"
+         ],
+         [
+            9,
+            "Final",
+            "A",
+            10,
+            "Final",
+            "A"
+         ],
+         [
+            10,
+            "Final",
+            "A",
+            11,
+            "Final",
+            "A"
+         ],
+         [
+            11,
+            "Final",
+            "A",
+            12,
+            "Final",
+            "A"
+         ],
+         [
+            12,
+            "Final",
+            "",
+            null,
+            null,
+            null
+         ],
+         [
+            12,
+            "Final",
+            "A",
+            12,
+            "Final",
+            "S"
+         ],
+         [
+            12,
+            "Final",
+            "S",
+            12,
+            "Final",
+            ""
+         ]
+      ]
+   ]
 }
