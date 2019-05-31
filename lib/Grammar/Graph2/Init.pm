@@ -15,7 +15,7 @@ use Graph::Feather;
 use Graph::Directed;
 use Graph::SomeUtils qw/:all/;
 use Grammar::Graph2;
-use Grammar::Graph2::TestParser::MatchEnumerator;
+# use Grammar::Graph2::TestParser::MatchEnumerator;
 use Grammar::Graph2::Topology;
 use Grammar::Graph2::Automata;
 use Grammar::Graph2::Megamata;

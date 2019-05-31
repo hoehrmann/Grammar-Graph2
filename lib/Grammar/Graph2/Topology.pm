@@ -46,6 +46,54 @@ sub BUILD {
   $self->_dbh->do(q{
 
     -----------------------------------------------------------------
+    -- view_top_down_reachable
+    -----------------------------------------------------------------
+
+    DROP VIEW IF EXISTS view_top_down_reachable;
+    CREATE VIEW view_top_down_reachable AS
+    WITH RECURSIVE top_down_reachable(id) AS (
+      SELECT
+        t.rowid AS id
+      FROM
+        t
+      WHERE
+        src_pos = (SELECT MIN(rowid) FROM testparser_input)
+        AND dst_pos = (SELECT 1 + MAX(rowid) FROM testparser_input)
+        AND src_vertex = (SELECT vertex FROM view_start_vertex)
+        AND dst_vertex = (SELECT vertex FROM view_final_vertex)
+
+      UNION
+
+      SELECT
+        t.rowid AS id
+      FROM
+        top_down_reachable
+          INNER JOIN t p
+            ON (p.rowid = top_down_reachable.id)
+          INNER JOIN t 
+            ON ((1=1 -- lhs
+                AND p.src_pos = t.src_pos
+                AND p.src_vertex = t.src_vertex
+                AND p.mid_src_pos = t.dst_pos
+                AND p.mid_src_vertex = t.dst_vertex)
+              OR (1=1 -- rhs
+                AND p.mid_dst_pos = t.src_pos
+                AND p.mid_dst_vertex = t.src_vertex
+                AND p.dst_pos = t.dst_pos
+                AND p.dst_vertex = t.dst_vertex)
+              OR (1=1 -- child
+                AND p.mid_src_pos = t.src_pos
+                AND p.mid_src_vertex = t.src_vertex
+                AND p.mid_dst_pos = t.dst_pos
+                AND p.mid_dst_vertex = t.dst_vertex))
+    )
+    SELECT
+      *
+    FROM
+      top_down_reachable
+    ;
+
+    -----------------------------------------------------------------
     -- view_parent_child
     -----------------------------------------------------------------
 
