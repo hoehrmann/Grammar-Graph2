@@ -369,7 +369,7 @@ sub _insert_dfa {
     json_new_vertices AS (
       SELECT
         JSON_GROUP_ARRAY(JSON_ARRAY(
-          id, type, name, run_list, shadow_group,
+          id, type, name, run_list, /* shadow_group */ NULL,
           JSON(shadows), state_id, trans_id, src, dst
         )) AS data
       FROM

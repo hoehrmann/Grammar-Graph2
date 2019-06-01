@@ -66,9 +66,6 @@ sub vp_contents_self_loop      { _rw_vertex_attribute('contents_self_loop',     
 sub vp_topo           { _rw_vertex_attribute('topo',          @_) }
 sub vp_skippable      { _rw_vertex_attribute('skippable',     @_) }
 sub vp_epsilon_group  { _rw_vertex_attribute('epsilon_group', @_) }
-sub vp_shadow_group   { _rw_vertex_attribute('shadow_group',  @_) }
-sub vp_stack_group    { _rw_vertex_attribute('stack_group',  @_) }
-sub vp_representative { _rw_vertex_attribute('representative',@_) }
 
 #####################################################################
 #
@@ -282,10 +279,7 @@ sub from_grammar_graph {
       contents_self_loop DEFAULT 'no',
       topo INT,
       skippable,
-      epsilon_group,
-      shadow_group,
-      stack_group REFERENCES Vertex(vertex_name) ON UPDATE CASCADE ON DELETE CASCADE,
-      representative REFERENCES Vertex(vertex_name) ON UPDATE CASCADE ON DELETE CASCADE
+      epsilon_group
     );
 
     DROP VIEW IF EXISTS view_vp_plus;
@@ -303,9 +297,6 @@ sub from_grammar_graph {
       topo,
       skippable,
       epsilon_group,
-      shadow_group,
-      stack_group,
-      representative,
       CAST( type IN (
         'Start', 'If', 'If1', 'If2',
         'Final', 'Fi', 'Fi1', 'Fi2'
