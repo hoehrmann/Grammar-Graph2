@@ -125,69 +125,6 @@ sub BUILD {
     ;
 
     -----------------------------------------------------------------
-    -- view_productive_loops
-    -----------------------------------------------------------------
-
-    DROP VIEW IF EXISTS view_productive_loops;
-    CREATE VIEW view_productive_loops AS
-    WITH RECURSIVE
-    path(root, is_productive, dst) AS (
-      SELECT
-        src_p.vertex AS root,
-        0 AS is_productive,
-        dst_p.vertex AS dst
-      FROM
-        Edge
-          INNER JOIN vertex_property as dst_p
-            ON (dst_p.vertex = Edge.dst)
-          INNER JOIN vertex_property as src_p
-            ON (src_p.vertex = Edge.src)
-      WHERE
-        src_p.partner IS NOT NULL
-        AND (
-          src_p.vertex IN (SELECT parent FROM view_paradoxical)
-          OR
-          src_p.partner IN (SELECT parent FROM view_paradoxical)
-        )
-
-      UNION
-
-      SELECT
-        root_p.vertex AS root,
-        r.is_productive
-          OR src_p.type = 'Input' AS is_productive,
-        dst_p.vertex AS dst
-      FROM
-        path r
-          INNER JOIN Edge
-            ON (Edge.src = r.dst)
-          INNER JOIN vertex_property as src_p
-            ON (src_p.vertex = Edge.src)
-          INNER JOIN vertex_property as dst_p
-            ON (dst_p.vertex = Edge.dst)
-          INNER JOIN vertex_property as root_p
-            ON (root_p.vertex = r.root)
-            
-      WHERE
-        1 = 1
-        AND src_p.vertex <> r.root
-        AND src_p.vertex <> root_p.partner
-    )
-    SELECT
-      root AS vertex
-    FROM
-      path
-    WHERE
-      root = dst
-    GROUP BY
-      root,
-      dst
-    HAVING
-      MAX(is_productive) = 1
-
-    ;
-
-    -----------------------------------------------------------------
     -- view_self_loop_linearity
     -----------------------------------------------------------------
 
@@ -249,34 +186,6 @@ sub BUILD {
       dst
     HAVING
       MAX(is_productive) = 1
-
-    ;
-
-    -----------------------------------------------------------------
-    -- view_self_loop
-    -----------------------------------------------------------------
-
-    DROP VIEW IF EXISTS view_self_loop;
-    CREATE VIEW view_self_loop AS
-    SELECT
-      src_p.vertex AS vertex,
-      CASE
-      WHEN (src_productive.vertex IS NOT NULL)
-        AND (partner_productive.vertex IS NOT NULL) THEN 'irregular'
-      WHEN (start_paradox.parent IS NOT NULL) THEN 'linear'
-      WHEN (final_paradox.parent IS NOT NULL) THEN 'linear'
-      ELSE 'no'
-      END AS self_loop
-    FROM
-      vertex_property src_p
-        LEFT JOIN view_paradoxical start_paradox
-          ON (start_paradox.parent = src_p.vertex)
-        LEFT JOIN view_paradoxical final_paradox
-          ON (final_paradox.parent = src_p.partner)
-        LEFT JOIN view_productive_loops src_productive
-          ON (src_productive.vertex = src_p.vertex)
-        LEFT JOIN view_productive_loops partner_productive
-          ON (partner_productive.vertex = src_p.partner)
 
     ;
 
@@ -395,41 +304,6 @@ sub BUILD {
       cond
     GROUP BY
       vertex
-    ;
-
-    -----------------------------------------------------------------
-    -- view_without_skippables
-    -----------------------------------------------------------------
-    DROP VIEW IF EXISTS view_without_skippables;
-    CREATE VIEW view_without_skippables AS 
-    WITH RECURSIVE
-    foo AS (
-      SELECT * FROM edge
-      UNION
-      SELECT
-        foo.src AS src,
-        edge.dst AS dst
-      FROM
-        foo
-          INNER JOIN edge
-            ON (foo.dst = edge.src)
-          INNER JOIN view_vp_plus mid_p
-            ON (mid_p.vertex = foo.dst
-              AND mid_p.skippable
-              AND mid_p.type <> 'Input')
-    )
-    SELECT
-      foo.*
-    FROM
-      foo
-        INNER JOIN view_vp_plus src_p
-          ON (src_p.vertex = foo.src)
-        INNER JOIN view_vp_plus dst_p
-          ON (dst_p.vertex = foo.dst)
-    WHERE
-      (src_p.type = 'Input' OR NOT(src_p.skippable))
-      AND
-      (dst_p.type = 'Input' OR NOT(dst_p.skippable))
     ;
 
   });
@@ -808,6 +682,11 @@ sub _add_topological_attributes {
 sub _add_skippable {
   my ($self) = @_;
 
+  # TODO: do not understand why seemingly irregulars are skippable
+  # this seems to say that only grammar start/final vertex and any
+  # conditional vertex is not skippable. This also seems to mix 0
+  # and 'no'
+
   my @skippable = $self->_dbh->selectall_array(q{
     WITH 
     conditionals AS (
@@ -830,39 +709,9 @@ sub _add_skippable {
         conditionals
           INNER JOIN json_each(conditionals.six_tuple) each
     )
-/*
-    , if_property AS (
-      SELECT
-        base.root AS root,
-        MIN(MIN(related_p.self_loop, related_p.contents_self_loop)) AS property
-      FROM
-        base
-          INNER JOIN view_vp_plus related_p
-            ON (base.related = related_p.vertex)
-      GROUP BY 
-        base.root
-    ),
-    result AS (
-      SELECT
-        base.related AS vertex,
-        if_property.property AS property
-      FROM
-        if_property
-          INNER JOIN base
-            ON (if_property.root = base.root)
-      UNION
-      SELECT
-        vertex_p.vertex AS vertex,
-        vertex_p.self_loop
-      FROM
-        view_vp_plus vertex_p
-      WHERE
-        NOT(vertex_p.is_conditional)
-    )
-*/
     SELECT
       vertex_p.vertex,
-      self_loop = 'no' AS skippable
+      (self_loop = 'no') AS skippable
     FROM
       vertex_property vertex_p
         INNER JOIN view_start_vertex
@@ -901,3 +750,127 @@ sub _add_skippable {
 
 __END__
 
+    -----------------------------------------------------------------
+    -- view_productive_loops
+    -----------------------------------------------------------------
+
+    DROP VIEW IF EXISTS view_productive_loops;
+    CREATE VIEW view_productive_loops AS
+    WITH RECURSIVE
+    path(root, is_productive, dst) AS (
+      SELECT
+        src_p.vertex AS root,
+        0 AS is_productive,
+        dst_p.vertex AS dst
+      FROM
+        Edge
+          INNER JOIN vertex_property as dst_p
+            ON (dst_p.vertex = Edge.dst)
+          INNER JOIN vertex_property as src_p
+            ON (src_p.vertex = Edge.src)
+      WHERE
+        src_p.partner IS NOT NULL
+        AND (
+          src_p.vertex IN (SELECT parent FROM view_paradoxical)
+          OR
+          src_p.partner IN (SELECT parent FROM view_paradoxical)
+        )
+
+      UNION
+
+      SELECT
+        root_p.vertex AS root,
+        r.is_productive
+          OR src_p.type = 'Input' AS is_productive,
+        dst_p.vertex AS dst
+      FROM
+        path r
+          INNER JOIN Edge
+            ON (Edge.src = r.dst)
+          INNER JOIN vertex_property as src_p
+            ON (src_p.vertex = Edge.src)
+          INNER JOIN vertex_property as dst_p
+            ON (dst_p.vertex = Edge.dst)
+          INNER JOIN vertex_property as root_p
+            ON (root_p.vertex = r.root)
+            
+      WHERE
+        1 = 1
+        AND src_p.vertex <> r.root
+        AND src_p.vertex <> root_p.partner
+    )
+    SELECT
+      root AS vertex
+    FROM
+      path
+    WHERE
+      root = dst
+    GROUP BY
+      root,
+      dst
+    HAVING
+      MAX(is_productive) = 1
+
+    ;
+
+    -----------------------------------------------------------------
+    -- view_self_loop
+    -----------------------------------------------------------------
+
+    DROP VIEW IF EXISTS view_self_loop;
+    CREATE VIEW view_self_loop AS
+    SELECT
+      src_p.vertex AS vertex,
+      CASE
+      WHEN (src_productive.vertex IS NOT NULL)
+        AND (partner_productive.vertex IS NOT NULL) THEN 'irregular'
+      WHEN (start_paradox.parent IS NOT NULL) THEN 'linear'
+      WHEN (final_paradox.parent IS NOT NULL) THEN 'linear'
+      ELSE 'no'
+      END AS self_loop
+    FROM
+      vertex_property src_p
+        LEFT JOIN view_paradoxical start_paradox
+          ON (start_paradox.parent = src_p.vertex)
+        LEFT JOIN view_paradoxical final_paradox
+          ON (final_paradox.parent = src_p.partner)
+        LEFT JOIN view_productive_loops src_productive
+          ON (src_productive.vertex = src_p.vertex)
+        LEFT JOIN view_productive_loops partner_productive
+          ON (partner_productive.vertex = src_p.partner)
+
+    ;
+
+
+--- this used to be in add_skippable
+
+/*
+    , if_property AS (
+      SELECT
+        base.root AS root,
+        MIN(MIN(related_p.self_loop, related_p.contents_self_loop)) AS property
+      FROM
+        base
+          INNER JOIN view_vp_plus related_p
+            ON (base.related = related_p.vertex)
+      GROUP BY 
+        base.root
+    ),
+    result AS (
+      SELECT
+        base.related AS vertex,
+        if_property.property AS property
+      FROM
+        if_property
+          INNER JOIN base
+            ON (if_property.root = base.root)
+      UNION
+      SELECT
+        vertex_p.vertex AS vertex,
+        vertex_p.self_loop
+      FROM
+        view_vp_plus vertex_p
+      WHERE
+        NOT(vertex_p.is_conditional)
+    )
+*/
