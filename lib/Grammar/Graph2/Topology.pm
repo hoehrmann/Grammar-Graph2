@@ -466,6 +466,7 @@ sub _add_skippable {
   my ($self) = @_;
 
   # TODO: simplify
+  # TODO: make into VIEW
 
   my @skippable = $self->_dbh->selectall_array(q{
     WITH 
