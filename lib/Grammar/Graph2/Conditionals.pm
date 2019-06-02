@@ -33,15 +33,8 @@ sub _replace_conditionals {
 
   # Maybe this should be computed before mega?
 
-  my $db_utils = Grammar::Graph2::DBUtils->new(
-    g => $self);
-
-  $db_utils->views_to_tables(
-    'view_parent_child',
-  );
-
   my @parent_child_edges = $p->_dbh->selectall_array(q{
-    SELECT parent, child FROM m_view_parent_child
+    SELECT parent, child FROM view_parent_child
   });
 
   # TODO: after mega parent_child_edges is very large
@@ -127,34 +120,7 @@ sub _new_cond {
   my $if1_regular;
   my $if2_regular;
 
-if (0) {
-
-  my $db_utils = Grammar::Graph2::DBUtils->new(
-    g => $g2);
-
-  # TODO: view access the view instead of asking vertex_property?
-
-  $db_utils->views_to_tables(
-    'view_contents_self_loop',
-  );
-
-  ($if1_regular) = map { $_ eq 'no' } $g2->_dbh->selectrow_array(q{
-    SELECT self_loop
-    FROM m_view_contents_self_loop
-    WHERE vertex = ?
-  }, {}, $if1);
-
-  ($if2_regular) = map { $_ eq 'no' } $g2->_dbh->selectrow_array(q{
-    SELECT self_loop
-    FROM m_view_contents_self_loop
-    WHERE vertex = ?
-  }, {}, $if2);
-
-  # Those ^ make no sense, for one thing, self_loop is tri-state,
-  # and the code produces the same result for 'no' and 'irregular'
-  # TODO: Is that ^ still true and relevant? Does it affect `else`?
-
-} else {
+if (1) {
 
   ($if1_regular) = map { $_ eq 'no' } $g2->_dbh->selectrow_array(q{
     SELECT contents_self_loop

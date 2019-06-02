@@ -10,7 +10,6 @@ use File::Spec qw//;
 use List::UtilsBy qw/partition_by sort_by nsort_by uniq_by/;
 use List::MoreUtils qw/uniq/;
 use Grammar::Graph2::Alphabet;
-use Grammar::Graph2::DBUtils;
 use Graph::SomeUtils qw/:all/;
 use Algorithm::ConstructDFA2;
 use Set::IntSpan;
@@ -60,12 +59,6 @@ sub BUILD {
     DROP VIEW IF EXISTS view_vertex_shadows;
     CREATE VIEW view_vertex_shadows AS
     SELECT * FROM vertex_shadows;
-
-    DROP TABLE IF EXISTS m_view_vertex_shadows;
-    CREATE TABLE  m_view_vertex_shadows AS
-    SELECT * FROM view_vertex_shadows LIMIT 0;
-    CREATE UNIQUE INDEX idx_m_view_vertex_shadows
-      ON m_view_vertex_shadows(vertex, shadows);
   });
 
 }
