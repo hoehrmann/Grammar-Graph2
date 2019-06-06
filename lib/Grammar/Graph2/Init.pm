@@ -47,6 +47,7 @@ sub _init {
     base_graph => $self,
   );
 
+  # TODO: make into sub
   $self->_dbh->do(q{
     DROP TABLE IF EXISTS old_edge;
     CREATE TABLE old_edge(
@@ -78,6 +79,8 @@ sub _init {
   #  new call (earlier)
 #  $self->_cover_epsilons();
 
+
+  # TODO: make VIEW
   do {
     die "still has terminal->terminal edge";
   } if $self->_dbh->selectall_array(q{
@@ -249,6 +252,8 @@ sub _rename_vertices {
   # move to ::Ordering?
 
   local $self->_dbh->{sqlite_allow_multiple_statements} = 1;
+
+  # TODO: make below into VIEW
 
   # NOTE: this does not cover vertex_span but this method
   # is not called after creating the vertex_span table. 

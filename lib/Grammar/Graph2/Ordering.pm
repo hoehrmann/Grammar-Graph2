@@ -87,6 +87,8 @@ sub _scg_topological_depth {
 
   my $scgf = _strongly_connected_graph_feather($d);
 
+  # TOOD: make into VIEW
+
   my $result = $scgf->{dbh}->selectall_hashref(q{
     WITH RECURSIVE
     roots(vertex) AS (
@@ -153,6 +155,7 @@ sub _topo_parent_child {
         pc.child AS child
       FROM
         view_parent_child pc
+          -- FIXME: no join needed here
           INNER JOIN vertex_property parent_p
             ON (pc.parent = parent_p.vertex)
           INNER JOIN vertex_property child_p

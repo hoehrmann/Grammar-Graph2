@@ -46,6 +46,8 @@ sub mega {
   my $dbh = $self->base_graph->_dbh;
   my $g2 = $self->base_graph;
 
+  # TODO: 2019: use the region SQLs here?
+
   # TODO: group start vertices by predecessor set
 
   # TODO: does not really make sense to look at shadowings?

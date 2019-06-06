@@ -90,6 +90,8 @@ sub _cover_epsilons {
     base_graph => $g2,
   );
 
+  # TODO: split this VIEW into several?
+
   my ($data) = $g2->_dbh->selectrow_array(q{
 
     WITH
@@ -321,6 +323,11 @@ sub _cover_epsilons {
       NULL
 
   });
+
+  if (!$data) {
+    $g2->_log->debug('no epsilons to cover?');
+    return;
+  }
 
   my $decoded = $g2->_json->decode($data);
 
